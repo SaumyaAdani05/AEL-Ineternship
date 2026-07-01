@@ -1,0 +1,22 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="700" viewBox="0 0 1280 700">
+  <rect width="1280" height="700" fill="#fbfbf8"/>
+  <style>.title{font:700 30px Arial;fill:#152238}.step{fill:#fff;stroke:#355c7d;stroke-width:2;rx:8}.text{font:16px Arial;fill:#152238}.small{font:13px Arial;fill:#475569}.num{font:700 18px Arial;fill:#fff}.circle{fill:#1f7a6d}.arrow{stroke:#be6b21;stroke-width:3;fill:none;marker-end:url(#arrow)}.band{fill:#eef7f4;stroke:#b7d9ce;stroke-width:1;rx:8}</style>
+  <defs><marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M2,2 L10,6 L2,10 Z" fill="#be6b21"/></marker></defs>
+  <text x="40" y="48" class="title">Updated Model Flow - Data Folder to Dashboard Risk Scores</text>
+  <rect x="45" y="80" width="1190" height="260" class="band"/>
+  <text x="65" y="112" class="small">Training and scoring pipeline</text>
+  <g transform="translate(75,145)"><rect width="180" height="125" class="step"/><circle cx="30" cy="30" r="18" class="circle"/><text x="25" y="36" class="num">1</text><text x="60" y="36" class="text">Load</text><text x="25" y="72" class="small">data/datasets.csv or</text><text x="25" y="96" class="small">v_ml_features</text></g>
+  <g transform="translate(305,145)"><rect width="180" height="125" class="step"/><circle cx="30" cy="30" r="18" class="circle"/><text x="25" y="36" class="num">2</text><text x="60" y="36" class="text">Preprocess</text><text x="25" y="72" class="small">ordinal maps</text><text x="25" y="96" class="small">duration fixes</text></g>
+  <g transform="translate(535,145)"><rect width="180" height="125" class="step"/><circle cx="30" cy="30" r="18" class="circle"/><text x="25" y="36" class="num">3</text><text x="60" y="36" class="text">Encode</text><text x="25" y="72" class="small">one-hot + LOO</text><text x="25" y="96" class="small">JobRole, EducationField</text></g>
+  <g transform="translate(765,145)"><rect width="180" height="125" class="step"/><circle cx="30" cy="30" r="18" class="circle"/><text x="25" y="36" class="num">4</text><text x="60" y="36" class="text">Train</text><text x="25" y="72" class="small">XGBoost survival:cox</text><text x="25" y="96" class="small">Cox PH for drivers</text></g>
+  <g transform="translate(995,145)"><rect width="180" height="125" class="step"/><circle cx="30" cy="30" r="18" class="circle"/><text x="25" y="36" class="num">5</text><text x="60" y="36" class="text">Save</text><text x="25" y="72" class="small">model_xgb.json</text><text x="25" y="96" class="small">scaler/encoder pkl</text></g>
+  <path d="M255 207 H305" class="arrow"/><path d="M485 207 H535" class="arrow"/><path d="M715 207 H765" class="arrow"/><path d="M945 207 H995" class="arrow"/>
+
+  <rect x="45" y="385" width="1190" height="235" class="band"/>
+  <text x="65" y="417" class="small">Inference and dashboard flow</text>
+  <g transform="translate(160,455)"><rect width="220" height="120" class="step"/><circle cx="30" cy="30" r="18" class="circle"/><text x="25" y="36" class="num">6</text><text x="60" y="36" class="text">Baseline Survival</text><text x="25" y="72" class="small">Nelson-Aalen curve</text><text x="25" y="96" class="small">average employee path</text></g>
+  <g transform="translate(455,455)"><rect width="220" height="120" class="step"/><circle cx="30" cy="30" r="18" class="circle"/><text x="25" y="36" class="num">7</text><text x="60" y="36" class="text">Time Shift</text><text x="25" y="72" class="small">S(t|x) = S0(t)^risk</text><text x="25" y="96" class="small">per-employee curve</text></g>
+  <g transform="translate(750,455)"><rect width="220" height="120" class="step"/><circle cx="30" cy="30" r="18" class="circle"/><text x="25" y="36" class="num">8</text><text x="60" y="36" class="text">Write Scores</text><text x="25" y="72" class="small">flight_risk_scores</text><text x="25" y="96" class="small">1M, 3M, 6M, 12M</text></g>
+  <g transform="translate(1030,455)"><rect width="170" height="120" class="step"/><circle cx="30" cy="30" r="18" class="circle"/><text x="25" y="36" class="num">9</text><text x="60" y="36" class="text">Serve</text><text x="25" y="72" class="small">app/server.py APIs</text><text x="25" y="96" class="small">dashboard.html</text></g>
+  <path d="M1085 270 V350 H270 V455" class="arrow"/><path d="M380 515 H455" class="arrow"/><path d="M675 515 H750" class="arrow"/><path d="M970 515 H1030" class="arrow"/>
+</svg>

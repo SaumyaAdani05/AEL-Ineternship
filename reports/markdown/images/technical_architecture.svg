@@ -1,0 +1,35 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="820" viewBox="0 0 1280 820">
+  <rect width="1280" height="820" fill="#f7f9fc"/>
+  <style>
+    .title{font:700 30px Arial;fill:#172033}.box{fill:#fff;stroke:#2b4c7e;stroke-width:2;rx:8}.db{fill:#eef5ff;stroke:#2b4c7e;stroke-width:2}.text{font:16px Arial;fill:#172033}.small{font:13px Arial;fill:#3d4b63}.arrow{stroke:#1f7a6d;stroke-width:3;fill:none;marker-end:url(#arrow)}.stage{font:700 14px Arial;fill:#1f7a6d}.note{font:12px Arial;fill:#7c2d12}
+  </style>
+  <defs><marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M2,2 L10,6 L2,10 Z" fill="#1f7a6d"/></marker></defs>
+  <text x="40" y="48" class="title">Updated Technical Architecture - Reorganized HR Attrition App</text>
+
+  <rect x="50" y="100" width="230" height="115" class="box"/>
+  <text x="75" y="132" class="stage">Source Data</text><text x="75" y="162" class="text">data/datasets.csv</text><text x="75" y="188" class="small">1,489 clean HR rows</text>
+
+  <rect x="360" y="100" width="230" height="115" class="db"/>
+  <text x="385" y="132" class="stage">Simulated HR System</text><text x="385" y="162" class="text">data/oltp_hr.db</text><text x="385" y="188" class="small">employees table</text>
+
+  <rect x="690" y="80" width="290" height="155" class="db"/>
+  <text x="720" y="112" class="stage">Analytics Warehouse</text><text x="720" y="142" class="text">data/olap_warehouse.db</text><text x="720" y="168" class="small">employee_history SCD Type 2</text><text x="720" y="192" class="small">theme tables + v_ml_features</text><text x="720" y="216" class="small">flight_risk_scores</text>
+
+  <rect x="80" y="325" width="265" height="155" class="box"/>
+  <text x="110" y="357" class="stage">ETL Layer</text><text x="110" y="387" class="text">pipeline/seed_db.py</text><text x="110" y="413" class="text">pipeline/etl.py</text><text x="110" y="440" class="small">seed OLTP, build OLAP, keep history</text>
+
+  <rect x="435" y="315" width="325" height="180" class="box"/>
+  <text x="465" y="347" class="stage">Production ML Layer</text><text x="465" y="377" class="text">pipeline/production_ml.py</text><text x="465" y="403" class="small">preprocess, encode, scale</text><text x="465" y="427" class="small">train XGBoost survival + Cox PH</text><text x="465" y="451" class="small">save pkl/json artifacts in pipeline/</text><text x="465" y="475" class="small">write scores into warehouse</text>
+
+  <rect x="850" y="325" width="300" height="155" class="box"/>
+  <text x="880" y="357" class="stage">Generated Outputs</text><text x="880" y="387" class="text">reports/generated/</text><text x="880" y="413" class="small">report_xgboost.html</text><text x="880" y="437" class="small">report_cox.html</text><text x="880" y="461" class="small">Markdown reports in reports/markdown/</text>
+
+  <rect x="190" y="610" width="315" height="125" class="box"/>
+  <text x="220" y="642" class="stage">Backend</text><text x="220" y="672" class="text">app/server.py</text><text x="220" y="698" class="small">/api/employees, /api/dashboard/stats</text><text x="220" y="720" class="small">history, what-if, simulate-action</text>
+
+  <rect x="720" y="610" width="315" height="125" class="box"/>
+  <text x="750" y="642" class="stage">Frontend</text><text x="750" y="672" class="text">app/dashboard.html</text><text x="750" y="698" class="small">risk cards, table, filters, drawer</text><text x="750" y="720" class="small">charts and what-if controls</text>
+
+  <path d="M280 157 H360" class="arrow"/><path d="M590 157 H690" class="arrow"/><path d="M835 235 V280 H212 V325" class="arrow"/><path d="M345 402 H435" class="arrow"/><path d="M760 402 H850" class="arrow"/><path d="M1000 480 V550 H347 V610" class="arrow"/><path d="M505 672 H720" class="arrow"/><path d="M720 642 H505" class="arrow"/>
+  <text x="40" y="790" class="note">Note: simulator_actions.py should be aligned to data/oltp_hr.db after refactor.</text>
+</svg>

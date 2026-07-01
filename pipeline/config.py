@@ -1,0 +1,123 @@
+"""
+config.py — Centralized configuration for the XGBoost Survival Pipeline.
+
+All column classifications, ordinal mappings, hyperparameters, and time horizons
+are defined here to keep the rest of the pipeline clean and DRY.
+"""
+from typing import Dict, List
+
+# ============================================================================
+#  COLUMN CLASSIFICATIONS
+# ============================================================================
+
+# Survival target columns (used by the model, excluded from features)
+DURATION_COL: str = "YearsAtCompany"
+EVENT_COL: str = "Attrition"
+
+# Ordinal categorical columns — have a meaningful rank order
+ORDINAL_COLS: List[str] = [
+    "BusinessTravel",
+    "Education",
+    "EnvironmentSatisfaction",
+    "JobInvolvement",
+    "JobLevel",
+    "JobSatisfaction",
+    "PerformanceRating",
+    "RelationshipSatisfaction",
+    "WorkLifeBalance",
+]
+
+# Ordinal encoding mappings (text label -> numeric rank)
+ORDINAL_MAPPINGS: Dict[str, Dict[str, int]] = {
+    "BusinessTravel": {"Non-Travel": 1, "Travel_Rarely": 2, "Travel_Frequently": 3},
+    "Education": {
+        "Below College": 1,
+        "College": 2,
+        "Bachelor": 3,
+        "Master": 4,
+        "Doctor": 5,
+    },
+    "EnvironmentSatisfaction": {"Low": 1, "Medium": 2, "High": 3, "Very High": 4},
+    "JobInvolvement": {"Low": 1, "Medium": 2, "High": 3, "Very High": 4},
+    "JobLevel": {
+        "Entry Level": 1,
+        "Junior Level": 2,
+        "Mid Level": 3,
+        "Senior Level": 4,
+        "Executive Level": 5,
+    },
+    "JobSatisfaction": {"Low": 1, "Medium": 2, "High": 3, "Very High": 4},
+    "PerformanceRating": {"Good": 1, "Excellent": 2, "Outstanding": 3},
+    "RelationshipSatisfaction": {"Low": 1, "Medium": 2, "High": 3, "Very High": 4},
+    "WorkLifeBalance": {"Bad": 1, "Low": 2, "Good": 3, "Better": 4, "Best": 5},
+}
+
+# Low-cardinality nominal columns — one-hot encoded
+ONE_HOT_COLS: List[str] = ["Gender", "MaritalStatus", "OverTime", "Department"]
+
+# High-cardinality nominal columns — Leave-One-Out target encoded
+LOO_COLS: List[str] = ["JobRole", "EducationField"]
+
+# Columns to skip during numeric casting (remain as text until encoding)
+SKIP_NUMERIC_CAST: List[str] = [
+    "Attrition",
+    "BusinessTravel",
+    "Department",
+    "EducationField",
+    "Gender",
+    "JobRole",
+    "MaritalStatus",
+    "OverTime",
+]
+
+# ============================================================================
+#  XGBOOST HYPERPARAMETERS
+# ============================================================================
+
+XGBOOST_PARAMS: Dict = {
+    "objective": "survival:cox",
+    "eval_metric": "cox-nloglik",
+    "n_estimators": 200,
+    "max_depth": 3,
+    "learning_rate": 0.03,
+    "subsample": 0.7,
+    "colsample_bytree": 0.7,
+    "min_child_weight": 10,
+    "reg_alpha": 1.0,
+    "reg_lambda": 5.0,
+    "gamma": 1.0,
+    "random_state": 42,
+    "verbosity": 0,
+}
+
+# Early stopping rounds during training
+EARLY_STOPPING_ROUNDS: int = 30
+
+# ============================================================================
+#  TIME HORIZONS (in years)
+# ============================================================================
+
+# Maps human-readable labels to fractional years
+TIME_HORIZONS: Dict[str, float] = {
+    "1-Month": 1 / 12,
+    "3-Month": 3 / 12,
+    "6-Month": 6 / 12,
+    "12-Month": 1.0,
+}
+
+# ============================================================================
+#  TRAIN / TEST SPLIT
+# ============================================================================
+
+TEST_SIZE: float = 0.2
+RANDOM_STATE: int = 42
+
+# ============================================================================
+#  REPORTING
+# ============================================================================
+
+# Risk threshold (probability) above which an employee is flagged as high-risk
+HIGH_RISK_THRESHOLD: float = 0.30  # 30% at any horizon
+
+# Maximum number of employees to display in the risk profile table
+MAX_DISPLAY_EMPLOYEES: int = 20
