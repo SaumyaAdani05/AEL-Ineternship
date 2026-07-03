@@ -11,6 +11,7 @@ Then generates visualizations and executive report.
 import sys
 import warnings
 from pathlib import Path
+from pipeline.config import DATA_DIR, REPORTS_DIR
 
 import numpy as np
 
@@ -36,9 +37,8 @@ from pipeline.html_reporter import generate_xgboost_html_report
 
 
 def main() -> None:
-    # Resolve dataset path relative to this script
-    script_dir = Path(__file__).resolve().parent
-    dataset_path = script_dir / "data" / "datasets.csv"
+    # Resolve dataset path from config
+    dataset_path = Path(DATA_DIR) / "datasets.csv"
 
     if not dataset_path.exists():
         print(f"ERROR: Dataset not found at {dataset_path}")
@@ -151,7 +151,7 @@ def main() -> None:
         importance_dict=model.get_booster().get_score(importance_type="gain"),
         train_cindex=train_cindex,
         test_cindex=test_cindex,
-        output_path=str(script_dir / "reports" / "generated" / "report_xgboost.html")
+        output_path=str(Path(REPORTS_DIR) / "generated" / "report_xgboost.html")
     )
 
 

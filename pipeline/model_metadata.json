@@ -1,0 +1,16 @@
+{
+    "training_timestamp": "2026-07-03T10:53:51.135365",
+    "dataset_rows": 1489,
+    "features_count": 31,
+    "model_type": "XGBoost Survival & Cox PH",
+    "python_version": "3.12.10 (tags/v3.12.10:0cc8128, Apr  8 2025, 12:21:36) [MSC v.1943 64 bit (AMD64)]",
+    "xgboost_version": "3.3.0",
+    "pandas_version": "2.3.3",
+    "artifacts": [
+        "scaler.pkl",
+        "loo_encoder.pkl",
+        "model_cph.pkl",
+        "model_xgb.json",
+        "baseline_survival.pkl"
+    ]
+}

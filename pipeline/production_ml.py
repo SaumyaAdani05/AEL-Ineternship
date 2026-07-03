@@ -7,6 +7,7 @@ and writes scores back to the OLAP database.
 """
 import os
 import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pickle
 import sqlite3
 import numpy as np
@@ -26,9 +27,7 @@ from pipeline.data_pipeline import preprocess_data
 from pipeline.model import prepare_survival_target, estimate_baseline_survival
 from pipeline import cli_formatter as cf
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OLAP_PATH = os.path.join(BASE_DIR, "data", "olap_warehouse.db")
-MODEL_DIR = os.path.join(BASE_DIR, "pipeline")
+from pipeline.config import OLAP_PATH, MODEL_DIR
 
 def get_active_cohort() -> pd.DataFrame:
     print("[*] Querying active employee cohort from Layer 2 view...")
@@ -130,7 +129,28 @@ def train_and_save_pipeline(df: pd.DataFrame):
     with open(os.path.join(MODEL_DIR, "baseline_survival.pkl"), "wb") as f:
         pickle.dump(baseline_survival, f)
         
-    print("[+] Model artifacts saved successfully.")
+    # Save model metadata
+    import json
+    metadata = {
+        "training_timestamp": datetime.now().isoformat(),
+        "dataset_rows": len(df_clean),
+        "features_count": len(X_train.columns),
+        "model_type": "XGBoost Survival & Cox PH",
+        "python_version": sys.version,
+        "xgboost_version": xgb.__version__,
+        "pandas_version": pd.__version__,
+        "artifacts": [
+            "scaler.pkl", 
+            "loo_encoder.pkl", 
+            "model_cph.pkl", 
+            "model_xgb.json", 
+            "baseline_survival.pkl"
+        ]
+    }
+    with open(os.path.join(MODEL_DIR, "model_metadata.json"), "w") as f:
+        json.dump(metadata, f, indent=4)
+        
+    print("[+] Model artifacts and metadata saved successfully.")
     return model, cph, loo_encoder, scaler, df_encoded, X_train, baseline_survival
 
 def compute_theme_contributions(cph, df_encoded: pd.DataFrame) -> pd.DataFrame:

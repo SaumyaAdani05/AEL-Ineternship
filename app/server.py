@@ -21,8 +21,8 @@ import xgboost as xgb
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
-from typing import Optional, Dict, Any
+from pydantic import BaseModel, Field
+from typing import Optional, Dict, Any, Literal
 from datetime import datetime
 
 # Suppress noisy sklearn version mismatch warnings when loading pickled models
@@ -32,9 +32,7 @@ warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
 sys.stdout.reconfigure(encoding='utf-8')
 
 # Paths and configuration
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OLAP_PATH = os.path.join(BASE_DIR, "data", "olap_warehouse.db")
-MODEL_DIR = os.path.join(BASE_DIR, "pipeline")
+from pipeline.config import OLAP_PATH, MODEL_DIR
 
 
 # In-memory pipeline cache
@@ -87,16 +85,24 @@ app = FastAPI(title="MNC HR Attrition Risk REST Service", lifespan=lifespan)
 
 class WhatIfRequest(BaseModel):
     EmployeeId: str
-    MonthlyIncome: Optional[float] = None
-    OverTime: Optional[str] = None
-    YearsWithCurrManager: Optional[int] = None
+    MonthlyIncome: Optional[float] = Field(None, ge=0)
+    OverTime: Optional[Literal["Yes", "No"]] = None
+    YearsWithCurrManager: Optional[int] = Field(None, ge=0)
     JobRole: Optional[str] = None
-    JobLevel: Optional[str] = None
+    JobLevel: Optional[Literal["Entry Level", "Junior Level", "Mid Level", "Senior Level", "Executive Level"]] = None
+
+class ActionParams(BaseModel):
+    JobRole: Optional[str] = None
+    JobLevel: Optional[Literal["Entry Level", "Junior Level", "Mid Level", "Senior Level", "Executive Level"]] = None
+    MonthlyIncome: Optional[float] = Field(None, ge=0)
+    OverTime: Optional[Literal["Yes", "No"]] = None
+    YearsWithCurrManager: Optional[int] = Field(None, ge=0)
+    PercentSalaryHike: Optional[float] = Field(None, ge=0)
 
 class ActionRequest(BaseModel):
-    action: str  # 'promote', 'overtime', 'manager_change', 'salary_hike'
+    action: Literal["promote", "overtime", "manager_change", "salary_hike"]
     EmployeeId: str
-    params: Dict[str, Any]
+    params: ActionParams
 
 # ============================================================================
 #  API ENDPOINTS
@@ -107,6 +113,15 @@ def get_dashboard():
     dash_path = os.path.join(os.path.dirname(__file__), "dashboard.html")
     with open(dash_path, "r", encoding="utf-8") as f:
         return f.read()
+
+import json
+@app.get("/api/model/metadata")
+def get_model_metadata():
+    metadata_path = os.path.join(MODEL_DIR, "model_metadata.json")
+    if os.path.exists(metadata_path):
+        with open(metadata_path, "r") as f:
+            return json.load(f)
+    return {"error": "Metadata not found."}
 
 @app.get("/api/employees")
 def list_employees(
@@ -455,18 +470,26 @@ def simulate_action(req: ActionRequest):
     
     try:
         if req.action == "promote":
+            if req.params.JobRole is None or req.params.JobLevel is None or req.params.MonthlyIncome is None:
+                raise HTTPException(status_code=400, detail="Missing required parameters for promotion")
             sa.promote_employee(
                 req.EmployeeId, 
-                req.params["JobRole"], 
-                req.params["JobLevel"], 
-                float(req.params["MonthlyIncome"])
+                req.params.JobRole, 
+                req.params.JobLevel, 
+                float(req.params.MonthlyIncome)
             )
         elif req.action == "overtime":
-            sa.change_overtime(req.EmployeeId, req.params["OverTime"])
+            if req.params.OverTime is None:
+                raise HTTPException(status_code=400, detail="Missing OverTime parameter")
+            sa.change_overtime(req.EmployeeId, req.params.OverTime)
         elif req.action == "manager_change":
-            sa.change_manager_tenure(req.EmployeeId, int(req.params["YearsWithCurrManager"]))
+            if req.params.YearsWithCurrManager is None:
+                raise HTTPException(status_code=400, detail="Missing YearsWithCurrManager parameter")
+            sa.change_manager_tenure(req.EmployeeId, int(req.params.YearsWithCurrManager))
         elif req.action == "salary_hike":
-            sa.adjust_salary(req.EmployeeId, float(req.params["PercentSalaryHike"]))
+            if req.params.PercentSalaryHike is None:
+                raise HTTPException(status_code=400, detail="Missing PercentSalaryHike parameter")
+            sa.adjust_salary(req.EmployeeId, float(req.params.PercentSalaryHike))
         else:
             raise HTTPException(status_code=400, detail=f"Unknown action: {req.action}")
             

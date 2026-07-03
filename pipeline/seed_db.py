@@ -5,13 +5,14 @@ Seeds the simulated Workday/SAP OLTP SQLite database ('oltp_hr.db')
 with the cleaned labeled rows from datasets.csv.
 """
 import os
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import sqlite3
 import pandas as pd
 
-# Load raw datasets.csv
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CSV_PATH = os.path.join(BASE_DIR, "data", "datasets.csv")
-OLTP_PATH = os.path.join(BASE_DIR, "data", "oltp_hr.db")
+from pipeline.config import DATA_DIR, OLTP_PATH
+
+CSV_PATH = os.path.join(DATA_DIR, "datasets.csv")
 
 def seed_oltp():
     print(f"[*] Reading '{CSV_PATH}' for OLTP seeding...")

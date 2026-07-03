@@ -57,6 +57,20 @@ def preprocess_data(data: pd.DataFrame) -> pd.DataFrame:
     """
     data = data.copy()
 
+    # Validation checks before processing (Phase 5)
+    if len(data) == 0:
+        raise ValueError("Dataset is empty. Cannot preprocess an empty dataset.")
+        
+    required_cols = {config.EVENT_COL, config.DURATION_COL}
+    missing_cols = required_cols - set(data.columns)
+    if missing_cols:
+        raise ValueError(f"Missing required columns: {missing_cols}")
+        
+    # Check Attrition validity
+    attrition_vals = set(data[config.EVENT_COL].dropna().astype(str).unique())
+    if not attrition_vals.issubset({"Yes", "No", "1", "0", "1.0", "0.0", "True", "False"}):
+        raise ValueError(f"Invalid Attrition values found: {attrition_vals}")
+
     # Map ordinal columns using config mappings
     for col, mapping in config.ORDINAL_MAPPINGS.items():
         if col in data.columns:

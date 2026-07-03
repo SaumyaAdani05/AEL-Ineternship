@@ -5,6 +5,18 @@ All column classifications, ordinal mappings, hyperparameters, and time horizons
 are defined here to keep the rest of the pipeline clean and DRY.
 """
 from typing import Dict, List
+import os
+
+# ============================================================================
+#  PATH CONFIGURATIONS
+# ============================================================================
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_DIR = os.path.join(BASE_DIR, "data")
+REPORTS_DIR = os.path.join(BASE_DIR, "reports")
+MODEL_DIR = os.path.join(BASE_DIR, "pipeline")
+
+OLTP_PATH = os.path.join(DATA_DIR, "oltp_hr.db")
+OLAP_PATH = os.path.join(DATA_DIR, "olap_warehouse.db")
 
 # ============================================================================
 #  COLUMN CLASSIFICATIONS

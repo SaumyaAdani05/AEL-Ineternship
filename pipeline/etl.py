@@ -6,13 +6,13 @@ in the OLAP warehouse (olap_warehouse.db), and partitions them into Layer 1 Them
 Creates the Layer 2 v_ml_features virtual view.
 """
 import os
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import sqlite3
 import pandas as pd
 from datetime import datetime
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OLTP_PATH = os.path.join(BASE_DIR, "data", "oltp_hr.db")
-OLAP_PATH = os.path.join(BASE_DIR, "data", "olap_warehouse.db")
+from pipeline.config import OLTP_PATH, OLAP_PATH
 
 # Schema mappings for the 5 logical domains
 THEME_COLUMNS = {

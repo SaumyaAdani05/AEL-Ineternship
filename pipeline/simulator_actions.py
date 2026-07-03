@@ -8,8 +8,9 @@ import sqlite3
 import subprocess
 import os
 import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-OLTP_PATH = "oltp_hr.db"
+from pipeline.config import OLTP_PATH
 
 def execute_sql(query, params=()):
     conn = sqlite3.connect(OLTP_PATH)
