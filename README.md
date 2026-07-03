@@ -1,4 +1,4 @@
-﻿# HR Attrition Risk Prediction Dashboard
+# HR Attrition Risk Prediction Dashboard
 
 This project is an HR analytics and machine learning application for predicting employee attrition risk. It uses employee data, prepares it through an ETL and ML pipeline, stores risk scores in an analytics warehouse, and shows the results in a FastAPI dashboard.
 
@@ -224,4 +224,3 @@ The dashboard can help HR teams and business heads:
 ## Disclaimer
 
 This project should be used as a decision-support tool, not as the final decision maker. HR teams should use model output carefully and combine it with human judgement, policy, and ethical review.
-
