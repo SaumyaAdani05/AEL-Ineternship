@@ -34,6 +34,10 @@ def seed_oltp():
     # Convert Yes/No target or categoricals to strings
     for col in df.select_dtypes(include=['object']).columns:
         df[col] = df[col].astype(str)
+    
+    # Fix 'nan' strings in DateOfLeaving back to actual None/NULL
+    if 'DateOfLeaving' in df.columns:
+        df['DateOfLeaving'] = df['DateOfLeaving'].replace('nan', None)
 
     # Write to SQLite
     if os.path.exists(OLTP_PATH):

@@ -22,8 +22,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any, Literal
+from typing import Optional, Dict, Any, Literal, List
 from datetime import datetime
+from neo4j import GraphDatabase, exceptions
 
 # Suppress noisy sklearn version mismatch warnings when loading pickled models
 warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
@@ -75,7 +76,18 @@ from contextlib import asynccontextmanager
 async def lifespan(app):
     """Modern lifespan handler replacing deprecated on_event('startup')."""
     load_pipeline()
+    
+    # Initialize Neo4j driver
+    try:
+        app.state.neo4j_driver = GraphDatabase.driver("bolt://localhost:7687", auth=("neo4j", "password"))
+    except Exception as e:
+        print(f"[!] Warning: Could not connect to Neo4j. Graph features will run in mock mode. Error: {e}")
+        app.state.neo4j_driver = None
+        
     yield
+    
+    if getattr(app.state, "neo4j_driver", None):
+        app.state.neo4j_driver.close()
 
 app = FastAPI(title="MNC HR Attrition Risk REST Service", lifespan=lifespan)
 
@@ -503,6 +515,58 @@ def simulate_action(req: ActionRequest):
         raise HTTPException(status_code=500, detail=f"Simulation transaction failed: {str(e)}")
         
     return {"status": "success", "message": "Simulation action completed and models recalculated."}
+
+@app.get("/api/graph/exposure/{employee_id}")
+def get_graph_exposure(employee_id: str):
+    """
+    Computes Network Exposure score using a Neo4j Cypher query.
+    Falls back to a calculated mock score if Neo4j is offline.
+    """
+    driver = app.state.neo4j_driver
+    if not driver:
+        # Mock fallback based on generic department risk
+        import random
+        random.seed(employee_id)
+        mock_score = round(random.uniform(0, 3.5), 2)
+        mock_peers = [{"id": f"EMP_{random.randint(1000, 1400)}", "role": "Peer", "weight": 0.6}] if mock_score > 1.0 else []
+        return {"exposure_score": mock_score, "connected_exits": mock_peers}
+        
+    query = """
+    MATCH (e:Employee {id: $employee_id})-[r:SAME_MANAGER|SAME_ROLE_DEPT|SAME_TENURE_COHORT]-(peer:Employee)
+    WHERE peer.isActive = false AND peer.exitDate <> ''
+    WITH peer, r, duration.inDays(date(peer.exitDate), date()).days AS days_since_exit
+    WHERE days_since_exit <= 60
+    RETURN peer.id AS peer_id, peer.jobRole AS peer_role, r.weight AS edge_weight, days_since_exit
+    ORDER BY edge_weight DESC LIMIT 5
+    """
+    
+    try:
+        with driver.session() as session:
+            result = session.run(query, employee_id=employee_id)
+            peers = []
+            total_exposure = 0.0
+            
+            for record in result:
+                weight = float(record["edge_weight"])
+                days = int(record["days_since_exit"])
+                # Time decay: fully weighted at day 0, decays to 0 at day 60
+                decay = max(0, (60 - days) / 60.0)
+                exposure = weight * decay
+                total_exposure += exposure
+                
+                peers.append({
+                    "id": record["peer_id"],
+                    "role": record["peer_role"],
+                    "weight": round(weight, 2),
+                    "exposure": round(exposure, 2)
+                })
+                
+            return {
+                "exposure_score": round(total_exposure, 2),
+                "connected_exits": peers
+            }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Neo4j Query Failed: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

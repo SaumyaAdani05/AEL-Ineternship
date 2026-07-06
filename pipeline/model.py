@@ -42,7 +42,7 @@ def prepare_survival_target(df: pd.DataFrame) -> Tuple[pd.DataFrame, np.ndarray]
         X: Feature matrix (all columns except duration and event)
         y: Signed duration array (positive = attrited, negative = censored)
     """
-    exclude_cols = [config.DURATION_COL, config.EVENT_COL]
+    exclude_cols = [config.DURATION_COL, config.EVENT_COL, "DateOfLeaving", "EmployeeId"]
     feature_cols = [c for c in df.columns if c not in exclude_cols]
 
     X = df[feature_cols].copy()
