@@ -1,5 +1,5 @@
 {
-    "training_timestamp": "2026-07-03T10:53:51.135365",
+    "training_timestamp": "2026-07-06T12:39:17.089927",
     "dataset_rows": 1489,
     "features_count": 31,
     "model_type": "XGBoost Survival & Cox PH",
