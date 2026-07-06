@@ -353,6 +353,11 @@
           <h4 class="text-sm font-bold text-slate-700">What-If Simulation</h4>
           <p class="text-xs text-slate-500 leading-relaxed mb-3">Simulate HR interventions to see the impact on this
             employee's risk trajectory.</p>
+            
+          <div id="simulation-results" class="hidden mb-3 p-3 bg-slate-50 border border-slate-100 rounded text-xs text-slate-600 space-y-1">
+             <!-- Injected by JS -->
+          </div>
+
           <div class="grid grid-cols-2 gap-3">
             <button onclick="simulateAction('promote')"
               class="btn-outline justify-center !border-orange-200 hover:!bg-orange-50 hover:!text-orange-700">Promote
@@ -360,9 +365,14 @@
             <button onclick="simulateAction('overtime')"
               class="btn-outline justify-center !border-sky-200 hover:!bg-sky-50 hover:!text-sky-700">Toggle
               Overtime</button>
-            <button onclick="simulateAction('salary_hike')"
-              class="btn-outline justify-center col-span-2 !border-emerald-200 hover:!bg-emerald-50 hover:!text-emerald-700">+15%
-              Salary Hike</button>
+            
+            <div class="col-span-2 flex gap-2">
+              <input type="number" id="hike_percent" value="15" class="w-16 px-2 py-1 border border-emerald-200 rounded text-xs text-center outline-none" min="1" max="100">
+              <button onclick="simulateAction('salary_hike')"
+                class="flex-1 btn-outline justify-center !border-emerald-200 hover:!bg-emerald-50 hover:!text-emerald-700">
+                Apply Salary Hike %
+              </button>
+            </div>
           </div>
         </div>
 
@@ -384,6 +394,7 @@
       total: 0
     };
 
+    let activeEmpRow = null;
     let activeEmpId = null;
     let drawerChart = null;
 
@@ -489,7 +500,7 @@
             </td>
             <td class="py-3 px-4">
               <div class="font-semibold text-slate-700">${row.JobRole}</div>
-              <div class="text-[10px] text-slate-400 font-medium">${row.Department}</div>
+              <div class="text-[10px] text-slate-400 font-medium">${row.Department} | OT: ${row.OverTime}</div>
             </td>
             <td class="py-3 px-4">
               <div class="font-bold text-slate-700">$${row.MonthlyIncome.toLocaleString()}</div>
@@ -523,10 +534,13 @@
     // Drawer Logic
     function openDrawer(rowStr) {
       const row = JSON.parse(decodeURIComponent(rowStr));
+      activeEmpRow = row;
       activeEmpId = row.EmployeeId;
       const drawer = document.getElementById("detail-drawer");
       drawer.classList.remove("drawer-hidden");
       drawer.classList.add("drawer-visible");
+      
+      document.getElementById("simulation-results").classList.add("hidden");
 
       document.getElementById("drawer-emp-id").innerText = row.EmployeeId;
       document.getElementById("drawer-role").innerText = `${row.JobRole} • ${row.Department}`;
@@ -590,20 +604,41 @@
     }
 
     async function simulateAction(actionName) {
-      if (!activeEmpId) return;
+      if (!activeEmpId || !activeEmpRow) return;
 
       const loader = document.getElementById("sim-loader");
       loader.classList.remove("opacity-0");
+      
+      const resultsDiv = document.getElementById("simulation-results");
+      resultsDiv.classList.add("hidden");
 
       try {
         let reqBody = { EmployeeId: activeEmpId };
+        let msg = "";
+
         if (actionName === 'promote') {
-          reqBody.JobLevel = "Mid Level"; // mock param
-          reqBody.MonthlyIncome = 15000;
+          const levels = ['Entry Level', 'Junior Level', 'Mid Level', 'Senior Level', 'Executive'];
+          let curIdx = levels.indexOf(activeEmpRow.JobLevel);
+          if (curIdx === -1) curIdx = 0;
+          let nextIdx = Math.min(curIdx + 1, levels.length - 1);
+          let nextLevel = levels[nextIdx];
+          let nextSalary = Math.round(activeEmpRow.MonthlyIncome * 1.20); // 20% bump on promo
+          
+          reqBody.JobLevel = nextLevel;
+          reqBody.MonthlyIncome = nextSalary;
+          
+          msg = `<strong>Simulated Promotion</strong><br>New Level: ${nextLevel}<br>New Salary: $${nextSalary.toLocaleString()}`;
+          
         } else if (actionName === 'overtime') {
-          reqBody.OverTime = "No";
+          let nextOt = activeEmpRow.OverTime === 'Yes' ? 'No' : 'Yes';
+          reqBody.OverTime = nextOt;
+          msg = `<strong>Simulated Overtime</strong><br>New OT Status: ${nextOt}`;
+          
         } else if (actionName === 'salary_hike') {
-          reqBody.MonthlyIncome = 20000; // mock param
+          let percent = parseFloat(document.getElementById('hike_percent').value) || 15;
+          let nextSalary = Math.round(activeEmpRow.MonthlyIncome * (1 + percent/100));
+          reqBody.MonthlyIncome = nextSalary;
+          msg = `<strong>Simulated ${percent}% Hike</strong><br>New Salary: $${nextSalary.toLocaleString()}`;
         }
 
         const res = await fetch(`/api/whatif`, {
@@ -612,6 +647,9 @@
           body: JSON.stringify(reqBody)
         });
         const data = await res.json();
+        
+        resultsDiv.innerHTML = msg;
+        resultsDiv.classList.remove("hidden");
 
         const simCurve = [
           parseFloat(data.Prob_1M),
