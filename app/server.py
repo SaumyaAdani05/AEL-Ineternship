@@ -575,9 +575,27 @@ def get_graph_exposure(employee_id: str):
                     "exposure": round(exposure, 2)
                 })
                 
+            # Calculate unboosted ML risk score
+            unboosted_score = None
+            try:
+                conn = sqlite3.connect(OLAP_PATH)
+                df_active = pd.read_sql("SELECT * FROM v_ml_features WHERE EmployeeId = ?", conn, params=(employee_id,))
+                conn.close()
+                if not df_active.empty:
+                    row_df = df_active.copy()
+                    if "EmployeeId" in row_df.columns:
+                        row_df.set_index("EmployeeId", inplace=True)
+                    x_encoded = encode_single_row(row_df)
+                    # Pass employee_id=None to intentionally get the raw unboosted score
+                    prof_unboosted = predict_risk_profile(x_encoded, employee_id=None)
+                    unboosted_score = prof_unboosted['General_Risk_Score']
+            except Exception as ml_e:
+                print(f"[!] Could not calculate unboosted score: {ml_e}")
+
             return {
                 "exposure_score": round(total_exposure, 2),
-                "connected_exits": peers
+                "connected_exits": peers,
+                "unboosted_score": round(unboosted_score, 1) if unboosted_score is not None else None
             }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Neo4j Query Failed: {str(e)}")
