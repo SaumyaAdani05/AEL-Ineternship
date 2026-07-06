@@ -357,7 +357,7 @@ def encode_single_row(row_df: pd.DataFrame) -> pd.DataFrame:
     x_encoded = x_encoded.astype(float)
     return x_encoded
 
-def predict_risk_profile(x_encoded: pd.DataFrame) -> Dict[str, float]:
+def predict_risk_profile(x_encoded: pd.DataFrame, employee_id: str = None) -> Dict[str, float]:
     """
     Calculates time-horizon probabilities for an encoded feature vector.
     """
@@ -368,6 +368,15 @@ def predict_risk_profile(x_encoded: pd.DataFrame) -> Dict[str, float]:
     raw_pred = model.predict(dmatrix, output_margin=True)[0]
     clipped_pred = np.clip(raw_pred, -15, 15)
     risk_multiplier = np.exp(clipped_pred)
+    
+    # Inject Graph Exposure Score as a multiplier
+    if employee_id:
+        try:
+            res = get_graph_exposure(employee_id)
+            exposure_score = float(res.get("exposure_score", 0.0))
+            risk_multiplier *= (1.0 + exposure_score)
+        except Exception as e:
+            print(f"[!] Could not fetch graph exposure: {e}")
     
     horizons = [1, 3, 6, 12]
     probs = {}
@@ -416,7 +425,7 @@ def get_employee_history(employee_id: str):
         
         try:
             x_encoded = encode_single_row(row_df)
-            profile = predict_risk_profile(x_encoded)
+            profile = predict_risk_profile(x_encoded, employee_id)
             
             history_points.append({
                 "date": row["valid_from"].split(" ")[0], # YYYY-MM-DD
@@ -465,7 +474,7 @@ def calculate_whatif(req: WhatIfRequest):
     # Run transformation and inference
     try:
         x_encoded = encode_single_row(row_df)
-        profile = predict_risk_profile(x_encoded)
+        profile = predict_risk_profile(x_encoded, req.EmployeeId)
     except Exception as e:
         import traceback
         traceback.print_exc()
