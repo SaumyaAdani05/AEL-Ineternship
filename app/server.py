@@ -79,7 +79,9 @@ async def lifespan(app):
     
     # Initialize Neo4j driver
     try:
-        app.state.neo4j_driver = GraphDatabase.driver("bolt://localhost:7687", auth=("neo4j", "password"))
+        driver = GraphDatabase.driver("bolt://localhost:7687", auth=("neo4j", "password"))
+        driver.verify_connectivity()
+        app.state.neo4j_driver = driver
     except Exception as e:
         print(f"[!] Warning: Could not connect to Neo4j. Graph features will run in mock mode. Error: {e}")
         app.state.neo4j_driver = None
@@ -291,6 +293,9 @@ def encode_single_row(row_df: pd.DataFrame) -> pd.DataFrame:
     """
     from pipeline import config
     from pipeline.data_pipeline import preprocess_data
+    
+    if 'DateOfLeaving' in row_df.columns:
+        row_df = row_df.drop(columns=['DateOfLeaving'])
     
     # 1. Preprocess (mappings, types, zero-duration fix)
     df_clean = preprocess_data(row_df)
