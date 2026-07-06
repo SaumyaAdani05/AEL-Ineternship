@@ -20,7 +20,7 @@ THEME_COLUMNS = {
     "environment": ["EmployeeId", "Department", "JobRole", "DistanceFromHome", "OverTime", "JobLevel"],
     "compensation": ["EmployeeId", "MonthlyIncome", "PercentSalaryHike", "StockOptionLevel", "DailyRate", "HourlyRate", "MonthlyRate"],
     "sentiment": ["EmployeeId", "EnvironmentSatisfaction", "RelationshipSatisfaction", "WorkLifeBalance", "JobInvolvement", "JobSatisfaction", "PerformanceRating"],
-    "tenure": ["EmployeeId", "YearsAtCompany", "YearsInCurrentRole", "YearsSinceLastPromotion", "YearsWithCurrManager", "TotalWorkingYears", "TrainingTimesLastYear", "NumCompaniesWorked", "Attrition"]
+    "tenure": ["EmployeeId", "YearsAtCompany", "YearsInCurrentRole", "YearsSinceLastPromotion", "YearsWithCurrManager", "TotalWorkingYears", "TrainingTimesLastYear", "NumCompaniesWorked", "Attrition", "DateOfLeaving"]
 }
 
 def init_olap_schema():
@@ -43,6 +43,7 @@ def init_olap_schema():
         StockOptionLevel INTEGER, TotalWorkingYears INTEGER, TrainingTimesLastYear INTEGER,
         WorkLifeBalance TEXT, YearsAtCompany INTEGER, YearsInCurrentRole INTEGER,
         YearsSinceLastPromotion INTEGER, YearsWithCurrManager INTEGER,
+        DateOfLeaving TEXT,
         valid_from TEXT,
         valid_to TEXT,
         is_active INTEGER
@@ -92,6 +93,7 @@ def init_olap_schema():
         EmployeeId TEXT, YearsAtCompany INTEGER, YearsInCurrentRole INTEGER, 
         YearsSinceLastPromotion INTEGER, YearsWithCurrManager INTEGER, 
         TotalWorkingYears INTEGER, TrainingTimesLastYear INTEGER, NumCompaniesWorked INTEGER, Attrition TEXT,
+        DateOfLeaving TEXT,
         valid_from TEXT, valid_to TEXT, is_active INTEGER
     );
     """)
@@ -125,7 +127,7 @@ def init_olap_schema():
         e.Department, e.JobRole, e.DistanceFromHome, e.OverTime, e.JobLevel,
         c.MonthlyIncome, c.PercentSalaryHike, c.StockOptionLevel, c.DailyRate, c.HourlyRate, c.MonthlyRate,
         s.EnvironmentSatisfaction, s.RelationshipSatisfaction, s.WorkLifeBalance, s.JobInvolvement, s.JobSatisfaction, s.PerformanceRating,
-        t.YearsAtCompany, t.YearsInCurrentRole, t.YearsSinceLastPromotion, t.YearsWithCurrManager, t.TotalWorkingYears, t.TrainingTimesLastYear, t.NumCompaniesWorked, t.Attrition
+        t.YearsAtCompany, t.YearsInCurrentRole, t.YearsSinceLastPromotion, t.YearsWithCurrManager, t.TotalWorkingYears, t.TrainingTimesLastYear, t.NumCompaniesWorked, t.Attrition, t.DateOfLeaving
     FROM theme_identity i
     JOIN theme_environment e ON i.EmployeeId = e.EmployeeId AND e.is_active = 1
     JOIN theme_compensation c ON i.EmployeeId = c.EmployeeId AND c.is_active = 1

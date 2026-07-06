@@ -219,6 +219,21 @@
           <div class="text-5xl font-extrabold text-slate-800 relative z-10" id="drawer-risk-score">--%</div>
         </div>
 
+        <!-- Network Exposure KPI -->
+        <div class="space-y-3">
+          <h4 class="text-sm font-bold text-slate-700">Contagion Exposure (60d)</h4>
+          <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm relative">
+            <div class="flex justify-between items-center border-b border-slate-50 pb-2 mb-2">
+              <span class="text-xs text-slate-500 font-medium">Exposure Score:</span>
+              <span class="text-lg font-bold text-rose-600" id="drawer-exposure-score">--</span>
+            </div>
+            <div id="drawer-exposure-peers" class="text-xs text-slate-600 space-y-1">
+              <!-- Injected by JS -->
+              Loading...
+            </div>
+          </div>
+        </div>
+
         <!-- Survival Curve -->
         <div class="space-y-3">
           <h4 class="text-sm font-bold text-slate-700">Risk Timeline</h4>
@@ -420,6 +435,29 @@
       const p12 = parseFloat(row.Prob_12M);
       
       renderDrawerChart([p1, p3, p6, p12]);
+      
+      // Fetch Graph Exposure
+      document.getElementById("drawer-exposure-score").innerText = "Loading...";
+      document.getElementById("drawer-exposure-peers").innerHTML = "Loading...";
+      fetch(`/api/graph/exposure/${activeEmpId}`)
+        .then(r => r.json())
+        .then(data => {
+          document.getElementById("drawer-exposure-score").innerText = data.exposure_score.toFixed(2);
+          if (data.connected_exits && data.connected_exits.length > 0) {
+            let html = "";
+            data.connected_exits.forEach(p => {
+              html += `<div class="flex justify-between"><span>${p.id} (${p.role})</span><span class="font-medium">w: ${p.weight}</span></div>`;
+            });
+            document.getElementById("drawer-exposure-peers").innerHTML = html;
+          } else {
+            document.getElementById("drawer-exposure-peers").innerHTML = `<div class="text-slate-400 italic">No recent connected exits.</div>`;
+          }
+        })
+        .catch(err => {
+          console.error(err);
+          document.getElementById("drawer-exposure-score").innerText = "Err";
+          document.getElementById("drawer-exposure-peers").innerHTML = `<div class="text-slate-400 italic">Could not fetch graph data.</div>`;
+        });
     }
 
     function closeDrawer() {

@@ -80,6 +80,7 @@ SKIP_NUMERIC_CAST: List[str] = [
     "JobRole",
     "MaritalStatus",
     "OverTime",
+    "DateOfLeaving"
 ]
 
 # ============================================================================
