@@ -3,3 +3,6 @@ __pycache__/
 scratch/
 *.pyc
 .DS_Store
+neo4j.zip
+neo4j-community-5.20.0/
+neo4j/
