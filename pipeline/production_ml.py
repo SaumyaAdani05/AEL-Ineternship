@@ -37,6 +37,10 @@ def get_active_cohort() -> pd.DataFrame:
     
     # Set EmployeeId as index
     df.set_index("EmployeeId", inplace=True)
+    
+    if "DateOfLeaving" in df.columns:
+        df.drop(columns=["DateOfLeaving"], inplace=True)
+        
     print(f"  [OK] Retracted {len(df)} active employee records.")
     return df
 

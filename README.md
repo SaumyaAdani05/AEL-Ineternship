@@ -13,6 +13,7 @@ The project is written in a simple MNC proof-of-concept style. It connects data 
 - Trains XGBoost survival and Cox PH models.
 - Calculates attrition risk for 1 month, 3 months, 6 months, and 12 months.
 - Stores model scores in `flight_risk_scores`.
+- Evaluates Attrition Contagion Graph (Network Exposure).
 - Serves a dashboard using FastAPI and HTML.
 - Supports employee filtering, risk review, history, and what-if simulation.
 
@@ -32,6 +33,8 @@ AEL Internship/
 |   |-- seed_db.py
 |   |-- etl.py
 |   |-- data_pipeline.py
+|   |-- graph_exporter.py
+|   |-- init_neo4j.bat
 |   |-- model.py
 |   |-- production_ml.py
 |   |-- simulator_actions.py
@@ -43,6 +46,7 @@ AEL Internship/
 |   |-- model_cph.pkl
 |   |-- model_xgb.json
 |   |-- baseline_survival.pkl
+|-- docker-compose.yml
 |-- reports/
 |   |-- generated/
 |   |   |-- report_xgboost.html
@@ -132,8 +136,16 @@ http://127.0.0.1:8000
 | `/api/employees` | GET | Employee list with risk scores, filters, sorting, and pagination |
 | `/api/dashboard/stats` | GET | Dashboard summary statistics |
 | `/api/employees/{employee_id}/history` | GET | Employee history and historical risk |
+| `/api/graph/exposure/{employee_id}` | GET | Neo4j query for contagion exposure (with mock fallback) |
 | `/api/whatif` | POST | Temporary what-if risk calculation |
 | `/api/simulate-action` | POST | Applies simulated HR action and reruns ETL/ML |
+
+## Attrition Contagion Graph (Network Exposure)
+
+An investigation was conducted to determine if attrition clusters temporally within departments (i.e. if an employee leaving triggers peers to leave). 
+1. **Validation (Phase 0):** A robust Monte Carlo permutation test over the historical database proved the actual lift was only `0.95x`. This statistically confirmed that exits do **not** cluster.
+2. **Infrastructure Built:** Although not integrated into the ML pipeline due to the negative signal, the graph infrastructure was fully built. Synthetic hierarchical data is generated via `pipeline/graph_exporter.py` and can be imported into a Neo4j Community instance via `docker-compose`.
+3. **Dashboard Fallback:** The FastAPI server connects to Neo4j to query time-decayed exposure scores. If the Docker instance is offline, it gracefully falls back to mock visual scores in the frontend Employee Detail drawer. The `production_ml.py` model explicitly excludes these scores to prevent noise.
 
 ## Model Flow
 
