@@ -1,78 +1,156 @@
 <!DOCTYPE html>
 <html lang="en" class="bg-[#F8F9FA] text-gray-800 h-full">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MNC Attrition Intelligence — Executive Support Dashboard</title>
-  
+
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  
+
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  
+
   <style>
-    body { font-family: 'Inter', sans-serif; }
-    
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+
     /* Scrollbar */
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 4px; }
-    ::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #CBD5E1;
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94A3B8;
+    }
 
     /* Custom Styles */
-    .card { 
-      background: white; 
-      border-radius: 1.25rem; 
+    .card {
+      background: white;
+      border-radius: 1.25rem;
       border: 1px solid #F1F5F9;
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -1px rgba(0, 0, 0, 0.02); 
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -1px rgba(0, 0, 0, 0.02);
     }
-    
-    .sidebar-link { 
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 0.6rem 1rem; border-radius: 0.75rem; 
-      color: #64748B; font-weight: 500; font-size: 0.875rem;
-      margin-bottom: 0.25rem; transition: all 0.2s; 
-    }
-    .sidebar-link.active { background-color: #FFF7ED; color: #EA580C; }
-    .sidebar-link:hover:not(.active) { background-color: #F8FAFC; color: #334155; }
-    
-    .btn-outline { 
-      display: flex; align-items: center; gap: 0.5rem; 
-      padding: 0.5rem 1rem; border: 1px solid #E2E8F0; 
-      border-radius: 0.75rem; font-weight: 500; font-size: 0.875rem; 
-      color: #475569; background: white; transition: all 0.2s; cursor: pointer;
-    }
-    .btn-outline:hover { background-color: #F8FAFC; border-color: #CBD5E1; }
 
-    th.sortable { cursor: pointer; user-select: none; transition: color 0.2s; }
-    th.sortable:hover { color: #EA580C; }
-    
+    .sidebar-link {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.6rem 1rem;
+      border-radius: 0.75rem;
+      color: #64748B;
+      font-weight: 500;
+      font-size: 0.875rem;
+      margin-bottom: 0.25rem;
+      transition: all 0.2s;
+    }
+
+    .sidebar-link.active {
+      background-color: #FFF7ED;
+      color: #EA580C;
+    }
+
+    .sidebar-link:hover:not(.active) {
+      background-color: #F8FAFC;
+      color: #334155;
+    }
+
+    .btn-outline {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      border: 1px solid #E2E8F0;
+      border-radius: 0.75rem;
+      font-weight: 500;
+      font-size: 0.875rem;
+      color: #475569;
+      background: white;
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+
+    .btn-outline:hover {
+      background-color: #F8FAFC;
+      border-color: #CBD5E1;
+    }
+
+    th.sortable {
+      cursor: pointer;
+      user-select: none;
+      transition: color 0.2s;
+    }
+
+    th.sortable:hover {
+      color: #EA580C;
+    }
+
     /* Drawer */
     #detail-drawer {
-      transition: transform 0.3s cubic-bezier(0.4,0,0.2,1), box-shadow 0.3s;
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s;
     }
-    #detail-drawer.drawer-hidden { transform: translateX(100%); box-shadow: none; }
-    #detail-drawer.drawer-visible { transform: translateX(0); box-shadow: -10px 0 25px rgba(0,0,0,0.05); }
+
+    #detail-drawer.drawer-hidden {
+      transform: translateX(100%);
+      box-shadow: none;
+    }
+
+    #detail-drawer.drawer-visible {
+      transform: translateX(0);
+      box-shadow: -10px 0 25px rgba(0, 0, 0, 0.05);
+    }
 
     /* Badges */
-    .badge-critical { background: #FEF2F2; color: #EF4444; }
-    .badge-high { background: #FFF7ED; color: #EA580C; }
-    .badge-medium { background: #EFF6FF; color: #3B82F6; }
-    .badge-low { background: #ECFCCB; color: #65A30D; }
+    .badge-critical {
+      background: #FEF2F2;
+      color: #EF4444;
+    }
+
+    .badge-high {
+      background: #FFF7ED;
+      color: #EA580C;
+    }
+
+    .badge-medium {
+      background: #EFF6FF;
+      color: #3B82F6;
+    }
+
+    .badge-low {
+      background: #ECFCCB;
+      color: #65A30D;
+    }
   </style>
 </head>
+
 <body class="flex h-full overflow-hidden">
 
 
   <!-- Main Content -->
   <main class="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-    
+
     <!-- Top Nav -->
     <header class="h-16 flex items-center justify-between px-8 bg-transparent shrink-0 pt-4">
       <!-- Search -->
       <div class="relative w-96">
-        <svg class="w-5 h-5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-        <input type="text" id="search-input" placeholder="Search employee ID or role..." class="w-full pl-10 pr-12 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-orange-500 transition-colors shadow-sm">
+        <svg class="w-5 h-5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor"
+          viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+        </svg>
+        <input type="text" id="search-input" placeholder="Search employee ID or role..."
+          class="w-full pl-10 pr-12 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-orange-500 transition-colors shadow-sm">
         <div class="absolute right-3 top-1/2 -translate-y-1/2 flex gap-1">
           <kbd class="px-1.5 py-0.5 text-[10px] text-slate-400 bg-slate-100 border border-slate-200 rounded">⌘</kbd>
           <kbd class="px-1.5 py-0.5 text-[10px] text-slate-400 bg-slate-100 border border-slate-200 rounded">F</kbd>
@@ -88,10 +166,10 @@
 
     <!-- Scrollable Content Grid -->
     <div class="flex-1 overflow-y-auto p-8 pt-4">
-      
+
       <!-- Top Widgets Row -->
       <div class="grid grid-cols-3 gap-6 mb-6">
-        
+
         <!-- Risk by Department -->
         <div class="card p-6 col-span-2 flex flex-col relative overflow-hidden">
           <div class="flex justify-between items-center mb-4 z-10">
@@ -100,7 +178,8 @@
               <div class="text-xs text-slate-500 mt-1">Company-wide risk score distribution</div>
             </div>
             <div class="flex gap-2">
-              <div class="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-600 flex items-center gap-1 cursor-pointer hover:bg-slate-50">
+              <div
+                class="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-600 flex items-center gap-1 cursor-pointer hover:bg-slate-50">
                 Avg Risk: <span id="stat-avg-risk" class="font-bold text-slate-800">-</span>
               </div>
             </div>
@@ -125,7 +204,7 @@
               <span id="stat-total" class="text-4xl font-extrabold text-slate-800 tracking-tight">-</span>
             </div>
           </div>
-          
+
           <div class="flex justify-around mt-4 pt-4 border-t border-slate-100">
             <div class="text-center">
               <div class="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
@@ -148,7 +227,7 @@
       <div class="grid grid-cols-3 gap-6 mb-6">
         <!-- Employee List Table -->
         <div class="card p-6 col-span-3 flex flex-col min-h-[400px]">
-          
+
           <div class="flex justify-between items-center mb-6">
             <h3 class="text-lg font-bold text-slate-800">Employee Risk Matrix</h3>
             <div class="flex gap-2">
@@ -160,7 +239,12 @@
               <select id="dept-filter" onchange="changeDepartmentFilter(this.value)" class="btn-outline outline-none">
                 <option value="">All Departments</option>
               </select>
-              <button class="btn-outline px-3 py-1.5 text-xs" onclick="fetchData()"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> Refresh</button>
+              <button class="btn-outline px-3 py-1.5 text-xs" onclick="fetchData()"><svg class="w-4 h-4" fill="none"
+                  stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
+                  </path>
+                </svg> Refresh</button>
             </div>
           </div>
 
@@ -168,10 +252,13 @@
             <table class="w-full text-left border-collapse">
               <thead>
                 <tr class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100">
-                  <th class="py-3 px-4 sortable" onclick="setSort('EmployeeId')">Employee Name <span class="sort-icon inline-block ml-1">⇅</span></th>
+                  <th class="py-3 px-4 sortable" onclick="setSort('EmployeeId')">Employee Name <span
+                      class="sort-icon inline-block ml-1">⇅</span></th>
                   <th class="py-3 px-4">Role</th>
-                  <th class="py-3 px-4 sortable" onclick="setSort('MonthlyIncome')">Monthly Salary <span class="sort-icon inline-block ml-1">⇅</span></th>
-                  <th class="py-3 px-4 sortable" onclick="setSort('General_Risk_Score')">Risk Score <span class="sort-icon inline-block ml-1">⇅</span></th>
+                  <th class="py-3 px-4 sortable" onclick="setSort('MonthlyIncome')">Monthly Salary <span
+                      class="sort-icon inline-block ml-1">⇅</span></th>
+                  <th class="py-3 px-4 sortable" onclick="setSort('General_Risk_Score')">Risk Score <span
+                      class="sort-icon inline-block ml-1">⇅</span></th>
                   <th class="py-3 px-4 text-center">Status</th>
                   <th class="py-3 px-4 text-right">Action</th>
                 </tr>
@@ -195,10 +282,11 @@
       </div>
 
     </div>
-    
+
     <!-- Detail Drawer Overlay -->
-    <div id="detail-drawer" class="absolute top-0 right-0 w-96 h-full bg-white shadow-2xl drawer-hidden flex flex-col z-50 border-l border-slate-100">
-      
+    <div id="detail-drawer"
+      class="absolute top-0 right-0 w-96 h-full bg-white shadow-2xl drawer-hidden flex flex-col z-50 border-l border-slate-100">
+
       <!-- Drawer Header -->
       <div class="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
         <div>
@@ -206,16 +294,19 @@
           <p class="text-xs font-semibold text-slate-500 mt-1" id="drawer-role">Role • Dept</p>
         </div>
         <button onclick="closeDrawer()" class="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-400">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
         </button>
       </div>
 
       <!-- Drawer Content -->
       <div class="flex-1 overflow-y-auto p-6 space-y-6">
-        
+
         <!-- Risk KPI -->
         <div class="bg-[#F8F9FA] p-5 rounded-2xl border border-slate-100 text-center relative overflow-hidden">
-          <div class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 relative z-10">Baseline Risk Score</div>
+          <div class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 relative z-10">Baseline Risk Score
+          </div>
           <div class="text-5xl font-extrabold text-slate-800 relative z-10" id="drawer-risk-score">--%</div>
         </div>
 
@@ -225,7 +316,7 @@
           <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm relative">
             <div class="flex justify-between items-center border-b border-slate-50 pb-2 mb-2">
               <span class="text-xs text-slate-500 font-medium">Exposure Score:</span>
-              <span class="text-lg font-bold text-rose-600" id="drawer-exposure-score">--</span>
+              <span class="text-lg font-bold text-slate-400" id="drawer-exposure-score">--</span>
             </div>
             <div id="drawer-exposure-peers" class="text-xs text-slate-600 space-y-1">
               <!-- Injected by JS -->
@@ -240,10 +331,14 @@
           <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm h-48 relative">
             <canvas id="drawer-curve-chart"></canvas>
             <!-- Loading overlay for simulation -->
-            <div id="sim-loader" class="absolute inset-0 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center opacity-0 pointer-events-none transition-opacity">
-              <svg class="animate-spin h-6 w-6 text-orange-500 mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <div id="sim-loader"
+              class="absolute inset-0 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center opacity-0 pointer-events-none transition-opacity">
+              <svg class="animate-spin h-6 w-6 text-orange-500 mb-2" xmlns="http://www.w3.org/2000/svg" fill="none"
+                viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                <path class="opacity-75" fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                </path>
               </svg>
               <span class="text-xs font-semibold text-slate-600">Simulating intervention...</span>
             </div>
@@ -253,11 +348,18 @@
         <!-- Simulation Actions -->
         <div class="space-y-3">
           <h4 class="text-sm font-bold text-slate-700">What-If Simulation</h4>
-          <p class="text-xs text-slate-500 leading-relaxed mb-3">Simulate HR interventions to see the impact on this employee's risk trajectory.</p>
+          <p class="text-xs text-slate-500 leading-relaxed mb-3">Simulate HR interventions to see the impact on this
+            employee's risk trajectory.</p>
           <div class="grid grid-cols-2 gap-3">
-            <button onclick="simulateAction('promote')" class="btn-outline justify-center !border-orange-200 hover:!bg-orange-50 hover:!text-orange-700">Promote (Lvl+1)</button>
-            <button onclick="simulateAction('overtime')" class="btn-outline justify-center !border-sky-200 hover:!bg-sky-50 hover:!text-sky-700">Toggle Overtime</button>
-            <button onclick="simulateAction('salary_hike')" class="btn-outline justify-center col-span-2 !border-emerald-200 hover:!bg-emerald-50 hover:!text-emerald-700">+15% Salary Hike</button>
+            <button onclick="simulateAction('promote')"
+              class="btn-outline justify-center !border-orange-200 hover:!bg-orange-50 hover:!text-orange-700">Promote
+              (Lvl+1)</button>
+            <button onclick="simulateAction('overtime')"
+              class="btn-outline justify-center !border-sky-200 hover:!bg-sky-50 hover:!text-sky-700">Toggle
+              Overtime</button>
+            <button onclick="simulateAction('salary_hike')"
+              class="btn-outline justify-center col-span-2 !border-emerald-200 hover:!bg-emerald-50 hover:!text-emerald-700">+15%
+              Salary Hike</button>
           </div>
         </div>
 
@@ -331,16 +433,16 @@
 
     async function fetchData() {
       const url = `/api/employees?page=${state.page}&limit=${state.limit}&search=${encodeURIComponent(state.search)}&status=${state.status}&sort_by=${state.sortBy}&sort_dir=${state.sortDir}&department=${encodeURIComponent(state.department)}`;
-      
+
       try {
         const res = await fetch(url);
         const data = await res.json();
-        
+
         state.total = data.total;
-        
+
         // Update stats
         document.getElementById("stat-total").innerText = data.total_active;
-        
+
         // Populate Departments dropdown if needed
         const deptSelect = document.getElementById("dept-filter");
         if (deptSelect.options.length <= 1 && data.departments) {
@@ -355,18 +457,18 @@
         // Render Table
         const tbody = document.getElementById("table-body");
         tbody.innerHTML = "";
-        
+
         data.employees.forEach((row, idx) => {
           const tr = document.createElement("tr");
           tr.className = "hover:bg-slate-50 transition-colors cursor-pointer group";
           const rowStr = encodeURIComponent(JSON.stringify(row));
           tr.onclick = () => openDrawer(rowStr);
-          
-          const riskClass = row.General_Risk_Score >= 80 ? 'badge-critical' : 
-                            row.General_Risk_Score >= 50 ? 'badge-high' : 
-                            row.General_Risk_Score >= 20 ? 'badge-medium' : 'badge-low';
-                            
-          const statusHtml = row.General_Risk_Score >= 50 
+
+          const riskClass = row.General_Risk_Score >= 80 ? 'badge-critical' :
+            row.General_Risk_Score >= 50 ? 'badge-high' :
+              row.General_Risk_Score >= 20 ? 'badge-medium' : 'badge-low';
+
+          const statusHtml = row.General_Risk_Score >= 50
             ? `<span class="px-2.5 py-1 rounded-md text-[10px] font-bold ${riskClass}">High Risk</span>`
             : `<span class="px-2.5 py-1 rounded-md text-[10px] font-bold ${riskClass}">Normal</span>`;
 
@@ -422,27 +524,36 @@
       const drawer = document.getElementById("detail-drawer");
       drawer.classList.remove("drawer-hidden");
       drawer.classList.add("drawer-visible");
-      
+
       document.getElementById("drawer-emp-id").innerText = row.EmployeeId;
       document.getElementById("drawer-role").innerText = `${row.JobRole} • ${row.Department}`;
       document.getElementById("drawer-risk-score").innerText = `${parseFloat(row.General_Risk_Score).toFixed(1)}%`;
-      
+
       if (drawerChart) drawerChart.destroy();
-      
+
       const p1 = parseFloat(row.Prob_1M);
       const p3 = parseFloat(row.Prob_3M);
       const p6 = parseFloat(row.Prob_6M);
       const p12 = parseFloat(row.Prob_12M);
-      
+
       renderDrawerChart([p1, p3, p6, p12]);
-      
+
       // Fetch Graph Exposure
       document.getElementById("drawer-exposure-score").innerText = "Loading...";
       document.getElementById("drawer-exposure-peers").innerHTML = "Loading...";
       fetch(`/api/graph/exposure/${activeEmpId}`)
         .then(r => r.json())
         .then(data => {
-          document.getElementById("drawer-exposure-score").innerText = data.exposure_score.toFixed(2);
+          const scoreEl = document.getElementById("drawer-exposure-score");
+          scoreEl.innerText = data.exposure_score.toFixed(2);
+          scoreEl.className = "text-lg font-bold";
+          if (data.exposure_score > 1.5) {
+            scoreEl.classList.add("text-rose-600");
+          } else if (data.exposure_score > 0.5) {
+            scoreEl.classList.add("text-amber-500");
+          } else {
+            scoreEl.classList.add("text-emerald-500");
+          }
           if (data.connected_exits && data.connected_exits.length > 0) {
             let html = "";
             data.connected_exits.forEach(p => {
@@ -469,10 +580,10 @@
 
     async function simulateAction(actionName) {
       if (!activeEmpId) return;
-      
+
       const loader = document.getElementById("sim-loader");
       loader.classList.remove("opacity-0");
-      
+
       try {
         let reqBody = { EmployeeId: activeEmpId };
         if (actionName === 'promote') {
@@ -483,21 +594,21 @@
         } else if (actionName === 'salary_hike') {
           reqBody.MonthlyIncome = 20000; // mock param
         }
-        
+
         const res = await fetch(`/api/whatif`, {
           method: 'POST',
-          headers: {'Content-Type': 'application/json'},
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(reqBody)
         });
         const data = await res.json();
-        
+
         const simCurve = [
           parseFloat(data.Prob_1M),
           parseFloat(data.Prob_3M),
           parseFloat(data.Prob_6M),
           parseFloat(data.Prob_12M)
         ];
-        
+
         // Add simulated curve to chart
         if (drawerChart) {
           if (drawerChart.data.datasets.length > 1) {
@@ -544,10 +655,10 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 12, font: {family: 'Inter', size: 10} } } },
+          plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 12, font: { family: 'Inter', size: 10 } } } },
           scales: {
-            y: { beginAtZero: true, max: 100, border: {display: false}, grid: {color: '#F1F5F9'} },
-            x: { border: {display: false}, grid: {display: false} }
+            y: { beginAtZero: true, max: 100, border: { display: false }, grid: { color: '#F1F5F9' } },
+            x: { border: { display: false }, grid: { display: false } }
           }
         }
       });
@@ -556,7 +667,7 @@
     // =========================================================================
     // Visual Charts Initialization
     // =========================================================================
-    
+
     let donutChartInst = null;
     let deptChartInst = null;
     let driversChartInst = null;
@@ -565,13 +676,13 @@
       try {
         const res = await fetch('/api/dashboard/stats');
         const data = await res.json();
-        
+
         // Update top-level KPI
         document.getElementById("stat-avg-risk").innerText = `${data.avg_risk_score.toFixed(1)}%`;
-        
+
         // Risk by Department Chart
         renderDeptChart(data.department_risk);
-        
+
 
 
       } catch (err) {
@@ -583,7 +694,7 @@
       const ctx = document.getElementById("dept-risk-chart").getContext("2d");
       const labels = Object.keys(deptRiskMap);
       const values = Object.values(deptRiskMap);
-      
+
       if (deptChartInst) {
         deptChartInst.data.labels = labels;
         deptChartInst.data.datasets[0].data = values;
@@ -605,8 +716,8 @@
             maintainAspectRatio: false,
             plugins: { legend: { display: false } },
             scales: {
-              y: { beginAtZero: true, max: 100, border: {display: false}, grid: {color: '#F1F5F9'} },
-              x: { border: {display: false}, grid: {display: false}, ticks: {font: {size: 10}} }
+              y: { beginAtZero: true, max: 100, border: { display: false }, grid: { color: '#F1F5F9' } },
+              x: { border: { display: false }, grid: { display: false }, ticks: { font: { size: 10 } } }
             }
           }
         });
@@ -618,7 +729,7 @@
     function updateDonutChart(dist) {
       const ctx = document.getElementById("donut-chart").getContext("2d");
       const dataValues = [dist.critical, dist.high, dist.medium, dist.low];
-      
+
       document.getElementById("stat-high-subtitle").innerText = `+${dist.critical + dist.high} Elevated`;
       document.getElementById("stat-normal-subtitle").innerText = `+${dist.low} Low`;
 
@@ -644,12 +755,12 @@
             maintainAspectRatio: false,
             plugins: {
               legend: { display: false },
-              tooltip: { 
-                backgroundColor: 'rgba(255, 255, 255, 0.9)', 
-                titleColor: '#1e293b', 
-                bodyColor: '#475569', 
-                borderColor: '#e2e8f0', 
-                borderWidth: 1 
+              tooltip: {
+                backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                titleColor: '#1e293b',
+                bodyColor: '#475569',
+                borderColor: '#e2e8f0',
+                borderWidth: 1
               }
             }
           }
@@ -665,4 +776,5 @@
 
   </script>
 </body>
+
 </html>
