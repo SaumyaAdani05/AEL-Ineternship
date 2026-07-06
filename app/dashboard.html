@@ -617,7 +617,7 @@
         let msg = "";
 
         if (actionName === 'promote') {
-          const levels = ['Entry Level', 'Junior Level', 'Mid Level', 'Senior Level', 'Executive'];
+          const levels = ['Entry Level', 'Junior Level', 'Mid Level', 'Senior Level', 'Executive Level'];
           let curIdx = levels.indexOf(activeEmpRow.JobLevel);
           if (curIdx === -1) curIdx = 0;
           let nextIdx = Math.min(curIdx + 1, levels.length - 1);
