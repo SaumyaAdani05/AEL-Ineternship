@@ -9,17 +9,17 @@ Updated after latest project changes
 
 This project helps HR and business leaders identify employees who may be at higher risk of leaving the company. It uses employee data such as department, job role, salary, overtime, satisfaction, work-life balance, years at company, years with manager, and promotion-related information.
 
-The project has now been organized in a cleaner way. The dashboard is inside `app/`, the data is inside `data/`, and generated reports are inside `reports/generated/`. This makes it easier for a business or technical team to understand and maintain.
+The project has now been organized in a cleaner way. The dashboard is inside `app/`, the data is inside `data/`, generated reports are inside `reports/generated/`, the optional graph/Neo4j layer is separated from the core ML scoring pipeline, and an organization-network view has been added for department and reporting-structure exploration. This makes it easier for a business or technical team to understand, maintain, and audit.
 
 Current business snapshot:
 
 | Business Metric | Current Value |
 |---|---:|
 | Active employees scored | 1,489 |
-| High-risk employees above 30% threshold | 809 |
-| Average 12-month leave risk | 49.19% |
+| High-risk employees above 30% threshold | 1,022 |
+| Average 12-month leave risk | 61.21% |
 | Largest department | Research & Development |
-| Main business output | Risk probability for 1M, 3M, 6M, and 12M |
+| Main business output | Risk probability for 1M, 3M, 6M, and 12M |`r`n| New dashboard support | Organization network view with risk scores |
 
 ## 2. What Problem This Solves
 
@@ -53,24 +53,24 @@ This is helpful because HR teams can prioritize urgent cases separately from lon
 
 From the current scored data:
 
-- Average 1-month leave risk is 32.88%.
-- Average 3-month leave risk is 38.22%.
-- Average 6-month leave risk is 43.17%.
-- Average 12-month leave risk is 49.19%.
-- 809 out of 1,489 employees are above the 30% high-risk threshold.
+- Average 1-month leave risk is 39.94%.
+- Average 3-month leave risk is 47.43%.
+- Average 6-month leave risk is 53.86%.
+- Average 12-month leave risk is 61.21%.
+- 1,022 out of 1,489 employees are above the 30% high-risk threshold.
 
 ## 5. Department-Level View
 
 | Department | Employees | Average 12-Month Risk | High-Risk Employees |
 |---|---:|---:|---:|
-| Research & Development | 975 | 49.65% | 543 |
-| Sales | 451 | 48.00% | 229 |
-| Human Resources | 63 | 50.62% | 37 |
+| Human Resources | 63 | 63.04% | 44 |
+| Research & Development | 975 | 63.57% | 702 |
+| Sales | 451 | 55.87% | 276 |
 
 Business interpretation:
 
 - Research & Development has the highest number of high-risk employees because it has the largest employee count.
-- Human Resources has the highest average risk percentage, but the department is smaller.
+- Human Resources and Research & Development both show high average 12-month risk, so they should be reviewed closely.
 - Sales should also be watched because attrition in Sales can affect clients and revenue continuity.
 
 ## 6. How Business Teams Can Use It
@@ -84,7 +84,7 @@ Simple business usage:
 3. Filter by department or high-risk status.
 4. Sort employees by risk score.
 5. Open employee detail drawer.
-6. Check risk drivers and risk curve.
+6. Check risk drivers, risk curve, and graph exposure context when available.
 7. Run what-if actions like salary hike, overtime change, manager change, or promotion.
 8. Decide whether HR should take action.
 9. Re-score after action to see updated risk.
@@ -125,7 +125,23 @@ Examples:
 
 This is useful because it gives business leaders a data-supported way to compare retention actions.
 
-## 9. How This Can Help an MNC
+
+## 9. Network Exposure Context
+
+The project also includes an optional graph layer for understanding whether an employee is close to recently exited peers. This is not used as a stored model feature in the main production scoring table because the validation work did not prove strong contagion lift. Instead, it is used as dashboard context.
+
+Business meaning:
+
+| Graph Signal | Business Use |
+|---|---|
+| Same manager | Check team-level retention pressure |
+| Same department and role | Check peer group attrition pressure |
+| Same tenure cohort | Check career-stage attrition pressure |
+| Recent connected exits | Understand whether risk may be socially or operationally amplified |
+
+If Neo4j is offline, the dashboard keeps working with a mock fallback. This keeps the business demo stable while still showing where graph intelligence can fit later.`r`n`r`nThe new organization-network page gives business leaders a second way to review risk: by department hierarchy and employee network context, not only by the main table.
+
+## 10. How This Can Help an MNC
 
 The model can help in these areas:
 
@@ -133,12 +149,12 @@ The model can help in these areas:
 |---|---|
 | Retention planning | Focus on employees with higher risk |
 | HR budgeting | Use salary/engagement budget more carefully |
-| Workforce planning | Understand future attrition pressure by department |
+| Workforce planning | Understand future attrition pressure by department |`r`n| Organization review | Inspect risk patterns across department/network structure |
 | Manager review | Identify teams where environment factors may be high |
 | Employee engagement | Find groups where satisfaction-related risk is visible |
 | Hiring planning | Prepare replacement hiring where risk is very high |
 
-## 10. Business Governance and Care
+## 11. Business Governance and Care
 
 This model should support human decision-making. It should not become the final decision maker.
 
@@ -151,7 +167,7 @@ Recommended rules:
 - Track whether HR actions actually reduce attrition over time.
 - Re-train and monitor the model regularly.
 
-## 11. Suggested MNC Rollout Plan
+## 12. Suggested MNC Rollout Plan
 
 | Phase | Action |
 |---|---|
@@ -162,8 +178,9 @@ Recommended rules:
 | Phase 5 | Schedule monthly or weekly scoring |
 | Phase 6 | Track intervention success and business impact |
 
-## 12. Final Business Conclusion
+## 13. Final Business Conclusion
 
 This project can help an MNC reduce attrition risk by giving early signals to HR and business leaders. It shows who may be at risk, when the risk may happen, and what kind of factor may be contributing.
 
 In simple words, this model helps the company act before employee attrition becomes a bigger business problem.
+

@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en" class="bg-[#F8F9FA] text-gray-800 h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Organization Network</title>
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <style>
+    body { font-family: 'Inter', sans-serif; overflow: hidden; margin: 0; padding: 0; height: 100vh; display: flex; flex-direction: column; }
+    
+    /* ─── Mindmap node styling ──────────────────────────────────── */
+    .node { cursor: pointer; }
+    .node rect {
+      transition: filter 0.2s ease;
+    }
+    .node:hover rect {
+      filter: brightness(0.95) drop-shadow(0 2px 6px rgba(0,0,0,0.12));
+    }
+    .node text {
+      font-family: 'Inter', sans-serif;
+      pointer-events: none;
+      user-select: none;
+    }
+    
+    /* ─── Connector lines ──────────────────────────────────────── */
+    .link {
+      fill: none;
+      stroke-opacity: 0.6;
+      stroke-width: 2px;
+    }
+    
+    /* ─── Expand/collapse badge ─────────────────────────────────── */
+    .collapse-badge {
+      cursor: pointer;
+    }
+    .collapse-badge circle {
+      fill: #fff;
+      stroke-width: 1.5px;
+      transition: fill 0.2s;
+    }
+    .collapse-badge:hover circle {
+      fill: #f1f5f9;
+    }
+    .collapse-badge text {
+      font-family: 'Inter', sans-serif;
+      pointer-events: none;
+      user-select: none;
+      font-weight: 600;
+    }
+
+    /* ─── Graph container ──────────────────────────────────────── */
+    #graph-container {
+      flex: 1;
+      position: relative;
+      cursor: crosshair;
+    }
+    #graph-container:active {
+      cursor: move;
+    }
+
+    /* ─── Drawer ───────────────────────────────────────────────── */
+    #drawer {
+      transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+      transform: translateX(100%);
+    }
+    #drawer.open {
+      transform: translateX(0);
+    }
+
+    /* ─── Subtle dot grid background ───────────────────────────── */
+    .dot-grid {
+      background-image: radial-gradient(circle, #d1d5db 0.6px, transparent 0.6px);
+      background-size: 24px 24px;
+    }
+  </style>
+</head>
+<body class="flex flex-col h-screen">
+
+  <!-- Header -->
+  <header class="h-14 flex items-center justify-between px-6 bg-white border-b border-slate-200 shrink-0 shadow-sm z-10">
+    <div class="flex items-center gap-4">
+      <a href="/" class="text-slate-400 hover:text-slate-700 transition-colors flex items-center gap-2 text-sm font-medium" title="Back to Dashboard">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+      </a>
+      <div class="h-6 w-px bg-slate-300"></div>
+      <h2 class="text-lg font-bold text-slate-800">Organization Network</h2>
+    </div>
+    
+    <div class="flex items-center gap-4">
+      <div class="flex items-center gap-2">
+        <label for="dept-filter" class="text-sm font-medium text-slate-600">Department:</label>
+        <select id="dept-filter" class="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500">
+          <option value="">All Departments</option>
+          <option value="Research & Development">Research & Development</option>
+          <option value="Sales">Sales</option>
+          <option value="Human Resources">Human Resources</option>
+        </select>
+      </div>
+      <label class="flex items-center gap-2 text-sm font-medium text-slate-600 cursor-pointer">
+        <input type="checkbox" id="show-exited" checked class="rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+        Show Exited
+      </label>
+    </div>
+  </header>
+
+  <!-- Main Content Area -->
+  <div class="flex flex-1 relative overflow-hidden">
+    
+    <!-- Graph Area -->
+    <div id="graph-container" class="w-full h-full bg-[#FAFBFC] dot-grid"></div>
+    
+    <!-- Right Drawer -->
+    <div id="drawer" class="absolute top-0 right-0 w-80 h-full bg-white border-l border-slate-200 shadow-2xl z-20 flex flex-col">
+      <div class="p-6 border-b border-slate-100 flex justify-between items-start">
+        <div>
+          <h3 id="drawer-name" class="text-lg font-bold text-slate-800">Node</h3>
+          <p id="drawer-role" class="text-sm text-slate-500 mt-1">Role</p>
+        </div>
+        <button id="close-drawer" class="text-slate-400 hover:text-slate-600 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+      <div class="p-6 flex-1 overflow-y-auto">
+        <div class="mb-6">
+          <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Exposure Status</h4>
+          <div id="exposure-chart" class="text-sm font-medium text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-100">
+            Loading...
+          </div>
+        </div>
+        <div>
+          <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Simulation</h4>
+          <div class="flex flex-col gap-2">
+            <button id="sim-btn" class="w-full py-2 px-4 bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors">
+              Simulate Action
+            </button>
+            <button id="reset-sim-btn" class="w-full py-2 px-4 bg-slate-200 hover:bg-slate-300 text-slate-700 text-sm font-semibold rounded-lg shadow-sm transition-colors">
+              Back to Normal
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ================================================================
+    //  CONFIGURATION
+    // ================================================================
+    const NODE_WIDTH  = 180;
+    const NODE_HEIGHT = 38;
+    const NODE_RX     = 19;  // pill shape
+    const NODE_SPACING_V = 48;   // vertical spacing between siblings
+    const NODE_SPACING_H = 260;  // horizontal spacing between depths
+    const ANIM_DURATION  = 600;
+    
+    // ================================================================
+    //  COLOR PALETTE
+    // ================================================================
+    const LINK_COLORS  = ['#7787ff', '#5c91c9', '#5c9c8f', '#789b89', '#6bba78'];
+    const TEXT_COLOR    = '#1e293b';  // slate-800
+    
+    function getNodeColor(d) {
+      if (d.data.is_simulated_exit || d.data.is_active === 0) return "#94a3b8"; // grey for exited ones
+      
+      let score = d.data.risk_score || 0;
+      if (score > 75) return "#ef4444"; // red: critical
+      if (score > 50) return "#f97316"; // orange: high
+      if (score > 25) return "#3b82f6"; // blue: mid
+      return "#22c55e"; // green: normal
+    }
+
+    function getLinkColor(depth) {
+      return LINK_COLORS[Math.min(depth, LINK_COLORS.length - 1)];
+    }
+
+    // ================================================================
+    //  D3 SETUP
+    // ================================================================
+    const container = document.getElementById("graph-container");
+    let width  = container.clientWidth;
+    let height = container.clientHeight;
+    
+    const svg = d3.select("#graph-container").append("svg")
+        .attr("width", width)
+        .attr("height", height);
+        
+    const g = svg.append("g");
+    
+    // Zoom and pan behavior
+    const zoom = d3.zoom()
+        .scaleExtent([0.15, 2.5])
+        .on("zoom", (event) => {
+            g.attr("transform", event.transform);
+        });
+    svg.call(zoom);
+    // Disable double-click zoom (interferes with node dblclick)
+    svg.on("dblclick.zoom", null);
+
+    const tree = d3.tree().nodeSize([NODE_SPACING_V, NODE_SPACING_H]);
+    
+    let rootNode;
+    let allNodesData;
+    let i = 0;  // node id counter
+
+    // ================================================================
+    //  CURVED CONNECTOR (NotebookLM-style organic curves)
+    // ================================================================
+    function diagonal(s, d, isEnterExit = false) {
+        let sx = s.y, sy = s.x;
+        let dx = d.y, dy = d.x;
+        
+        if (!isEnterExit) {
+            sx += NODE_WIDTH / 2;   // right edge of source
+            dx -= NODE_WIDTH / 2;   // left edge of target
+        }
+        
+        // Smooth cubic Bezier — horizontal emphasis
+        const midX = (sx + dx) / 2;
+        return `M ${sx},${sy}
+                C ${midX},${sy}
+                  ${midX},${dy}
+                  ${dx},${dy}`;
+    }
+
+    // ================================================================
+    //  UPDATE (render tree with animations)
+    // ================================================================
+    function update(source) {
+        const trans = d3.transition()
+            .duration(ANIM_DURATION)
+            .ease(d3.easeCubicInOut);
+        
+        tree(rootNode);
+        
+        const nodes = rootNode.descendants();
+        const links = rootNode.links();
+        
+        // Normalize depth spacing
+        nodes.forEach(d => { d.y = d.depth * NODE_SPACING_H; });
+        
+        // ─────────── LINKS ───────────
+        const link = g.selectAll("path.link")
+            .data(links, d => d.target.id);
+            
+        // Enter
+        const linkEnter = link.enter().insert("path", "g")
+            .attr("class", "link")
+            .attr("d", () => {
+                const o = { x: source.x0 ?? 0, y: source.y0 ?? 0 };
+                return diagonal(o, o, true);
+            })
+            .style("stroke", d => getLinkColor(d.source.depth))
+            .style("stroke-opacity", 0);
+            
+        // Update
+        linkEnter.merge(link).transition(trans)
+            .attr("d", d => diagonal(d.source, d.target))
+            .style("stroke", d => getLinkColor(d.source.depth))
+            .style("stroke-opacity", 0.55);
+            
+        // Exit
+        link.exit().transition(trans)
+            .style("stroke-opacity", 0)
+            .attr("d", () => {
+                const o = { x: source.x, y: source.y };
+                return diagonal(o, o, true);
+            })
+            .remove();
+        
+        // ─────────── NODES ───────────
+        const node = g.selectAll("g.node")
+            .data(nodes, d => d.id || (d.id = ++i));
+            
+        // Enter
+        const nodeEnter = node.enter().append("g")
+            .attr("class", "node")
+            .attr("transform", `translate(${source.y0 ?? 0},${source.x0 ?? 0})`)
+            .style("opacity", 0)
+            .on("click", (event, d) => {
+                event.stopPropagation();
+                toggleNode(d);
+            })
+            .on("dblclick", (event, d) => { 
+                event.stopPropagation();
+                showDrawer(d.data); 
+            });
+            
+        // Pill background
+        nodeEnter.append("rect")
+            .attr("width", NODE_WIDTH)
+            .attr("height", NODE_HEIGHT)
+            .attr("x", -NODE_WIDTH / 2)
+            .attr("y", -NODE_HEIGHT / 2)
+            .attr("rx", NODE_RX)
+            .attr("ry", NODE_RX)
+            .style("fill", d => getNodeColor(d))
+            .style("stroke", "#fff")
+            .style("stroke-width", "2px");
+            
+        // Label text
+        nodeEnter.append("text")
+            .attr("dy", "0.35em")
+            .attr("text-anchor", "middle")
+            .style("fill", TEXT_COLOR)
+            .style("font-size", d => d.depth === 0 ? "14px" : "12px")
+            .style("font-weight", d => d.depth <= 1 ? "600" : "500")
+            .text(d => {
+                const label = d.data.role || d.data.id;
+                const max = d.depth === 0 ? 24 : 22;
+                return label.length > max ? label.substring(0, max - 1) + '…' : label;
+            });
+        
+        // ─── Expand/Collapse badge (+ / −) ───
+        const badgeEnter = nodeEnter.append("g")
+            .attr("class", "collapse-badge")
+            .attr("transform", `translate(${NODE_WIDTH / 2 + 2}, 0)`)
+            .style("display", d => (d._children || d.children) ? "block" : "none");
+            
+        badgeEnter.append("circle")
+            .attr("r", 10)
+            .style("stroke", d => getLinkColor(d.depth));
+            
+        badgeEnter.append("text")
+            .attr("dy", "0.35em")
+            .attr("text-anchor", "middle")
+            .style("font-size", "13px")
+            .style("fill", d => getLinkColor(d.depth));
+            
+        // ─── UPDATE existing + entering nodes ───
+        const nodeUpdate = nodeEnter.merge(node);
+        
+        nodeUpdate.transition(trans)
+            .attr("transform", d => `translate(${d.y},${d.x})`)
+            .style("opacity", 1);
+            
+        nodeUpdate.select("rect")
+            .style("fill", d => {
+                if ((!d.data.is_active || d.data.is_simulated_exit) && document.getElementById('show-exited').checked) return "#94a3b8";
+                return getNodeColor(d);
+            })
+            .style("stroke", d => d._children ? getLinkColor(d.depth) : "#fff")
+            .style("stroke-width", d => d._children ? "2.5px" : "2px");
+            
+        // Update badge visibility and text
+        nodeUpdate.select(".collapse-badge")
+            .style("display", d => (d._children || d.children) ? "block" : "none");
+        nodeUpdate.select(".collapse-badge text")
+            .text(d => d._children ? "+" : "−")
+            .style("fill", d => getLinkColor(d.depth));
+        nodeUpdate.select(".collapse-badge circle")
+            .style("stroke", d => getLinkColor(d.depth));
+            
+        // ─── EXIT ───
+        node.exit().transition(trans)
+            .attr("transform", `translate(${source.y},${source.x})`)
+            .style("opacity", 0)
+            .remove();
+        
+        // Store old positions for next transition
+        nodes.forEach(d => {
+            d.x0 = d.x;
+            d.y0 = d.y;
+        });
+        
+        // Auto-fit after animation
+        setTimeout(() => autoZoom(source), ANIM_DURATION + 50);
+    }
+    
+    // ================================================================
+    //  TOGGLE EXPAND / COLLAPSE
+    // ================================================================
+    function toggleNode(d) {
+        if (d.children) {
+            d._children = d.children;
+            d.children = null;
+        } else if (d._children) {
+            d.children = d._children;
+            d._children = null;
+        }
+        update(d);
+    }
+    
+    // ================================================================
+    //  COLLAPSE HELPER
+    // ================================================================
+    function collapse(d) {
+        if (d.children) {
+            d._children = d.children;
+            d._children.forEach(collapse);
+            d.children = null;
+        }
+    }
+    
+    // ================================================================
+    //  AUTO-ZOOM (NotebookLM-style: root anchored left-center)
+    // ================================================================
+    function autoZoom(source) {
+        if (!rootNode) return;
+        
+        const nodes = rootNode.descendants();
+        if (nodes.length === 0) return;
+        
+        let minX = Infinity, maxX = -Infinity;
+        let minY = Infinity, maxY = -Infinity;
+        
+        nodes.forEach(n => {
+            const ny = n.y;  // horizontal position
+            const nx = n.x;  // vertical position
+            if (ny < minX) minX = ny;
+            if (ny > maxX) maxX = ny;
+            if (nx < minY) minY = nx;
+            if (nx > maxY) maxY = nx;
+        });
+        
+        // Add padding for node dimensions
+        minX -= NODE_WIDTH / 2;
+        maxX += NODE_WIDTH / 2 + 30; // extra for badge
+        minY -= NODE_HEIGHT / 2;
+        maxY += NODE_HEIGHT / 2;
+        
+        const padding = 60;
+        const treeW = Math.max(1, maxX - minX);
+        const treeH = Math.max(1, maxY - minY);
+        
+        // Calculate scale to fit
+        const scale = Math.min(
+            (width - padding * 2) / treeW,
+            (height - padding * 2) / treeH,
+            1.0  // Don't zoom in beyond 1x
+        );
+        
+        // Center the tree in viewport
+        const cx = (minX + maxX) / 2;
+        const cy = (minY + maxY) / 2;
+        const tx = width / 2 - cx * scale;
+        const ty = height / 2 - cy * scale;
+        
+        svg.transition()
+            .duration(ANIM_DURATION)
+            .ease(d3.easeCubicInOut)
+            .call(
+                zoom.transform, 
+                d3.zoomIdentity.translate(tx, ty).scale(scale)
+            );
+    }
+
+    // ================================================================
+    //  LOAD DATA & BUILD TREE
+    // ================================================================
+    function loadTree(department) {
+        let url = "/api/org-network/tree";
+        if (department) url += "?department=" + encodeURIComponent(department);
+        
+        d3.json(url).then(data => {
+            if (!data.nodes || data.nodes.length === 0) return;
+            allNodesData = data.nodes.filter(d => d.id === 'CEO' || d.manager_id);
+            if (!allNodesData.find(d => d.id === 'CEO')) return;
+            
+            // Store base risk scores to allow resetting simulations
+            allNodesData.forEach(n => {
+                n.base_risk_score = n.risk_score || 0;
+            });
+            
+            // Clear existing graph
+            g.selectAll("*").remove();
+            i = 0;
+            
+            try {
+                const root = d3.stratify()
+                    .id(d => d.id)
+                    .parentId(d => d.manager_id)
+                    (allNodesData);
+                
+                rootNode = root;
+                rootNode.x0 = 0;
+                rootNode.y0 = 0;
+                
+                // ─── NotebookLM-style initial state ───
+                // Only show root (CEO) + department heads (depth 1)
+                // Collapse dept heads' children for a clean start
+                if (rootNode.children) {
+                    rootNode.children.forEach(collapse);
+                }
+                
+                update(rootNode);
+                
+            } catch(e) {
+                console.error("Stratify error:", e);
+            }
+        });
+    }
+
+    // ================================================================
+    //  DRAWER LOGIC & SIMULATION
+    // ================================================================
+    const drawer = document.getElementById('drawer');
+    const closeDrawerBtn = document.getElementById('close-drawer');
+    let currentDrawerNodeData = null;
+    
+    function showDrawer(data) {
+        currentDrawerNodeData = data;
+        drawer.classList.add('open');
+        document.getElementById('drawer-name').innerText = data.id;
+        document.getElementById('drawer-role').innerText = `${data.department || ''} — ${data.role || ''}`;
+        
+        const expChart = document.getElementById('exposure-chart');
+        expChart.innerText = "Loading exposure…";
+        
+        d3.json("/api/org-network/exposure-history/" + data.id).then(res => {
+            const peers = res.peers || [];
+            if (peers.length > 0) {
+                expChart.innerHTML = `<div class="font-semibold text-red-600 mb-1">${peers.length} Peers Exited</div>
+                                      <ul class="list-disc pl-4 space-y-0.5">
+                                      ${peers.slice(0, 5).map(p => `<li class="text-slate-600">${p.id} <span class="text-slate-400">(${p.exit_date})</span></li>`).join('')}
+                                      </ul>`;
+            } else {
+                expChart.innerHTML = '<span class="text-green-600">✓</span> No peers exited recently. Risk is minimal.';
+            }
+        }).catch(() => {
+            expChart.innerText = "Failed to load exposure.";
+        });
+    }
+    
+    closeDrawerBtn.addEventListener('click', () => {
+        drawer.classList.remove('open');
+        currentDrawerNodeData = null;
+    });
+
+    document.getElementById('sim-btn').addEventListener('click', () => {
+        if (!currentDrawerNodeData) return;
+        
+        // 1. Mark as simulated exit
+        currentDrawerNodeData.is_simulated_exit = true;
+        
+        // 2. Ripple effect: Increase risk of peers/reports
+        if (allNodesData) {
+            allNodesData.forEach(n => {
+                if (n.id !== currentDrawerNodeData.id && 
+                   (n.manager_id === currentDrawerNodeData.manager_id || n.manager_id === currentDrawerNodeData.id)) {
+                    n.risk_score = (n.risk_score || 0) + 30; // bump risk
+                }
+            });
+        }
+        
+        // Update graph to show new colors
+        if (rootNode) update(rootNode);
+        
+        const btn = document.getElementById('sim-btn');
+        btn.innerText = "Simulated!";
+        setTimeout(() => { btn.innerText = "Simulate Action"; }, 2000);
+    });
+
+    document.getElementById('reset-sim-btn').addEventListener('click', () => {
+        if (allNodesData) {
+            allNodesData.forEach(n => {
+                n.is_simulated_exit = false;
+                n.risk_score = n.base_risk_score;
+            });
+        }
+        if (rootNode) update(rootNode);
+    });
+
+    // ================================================================
+    //  EVENT LISTENERS
+    // ================================================================
+    document.getElementById('dept-filter').addEventListener('change', e => {
+        loadTree(e.target.value);
+    });
+
+    document.getElementById('show-exited').addEventListener('change', () => {
+        if (rootNode) update(rootNode);
+    });
+
+    window.addEventListener('resize', () => {
+        width = container.clientWidth;
+        height = container.clientHeight;
+        svg.attr("width", width).attr("height", height);
+        if (rootNode) autoZoom(rootNode);
+    });
+
+    // ================================================================
+    //  INITIALIZE
+    // ================================================================
+    loadTree("");
+  </script>
+</body>
+</html>

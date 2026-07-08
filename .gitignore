@@ -6,3 +6,5 @@ scratch/
 neo4j.zip
 neo4j-community-5.20.0/
 neo4j/
+*.db
+reports/

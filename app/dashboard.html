@@ -159,8 +159,7 @@
 
       <!-- Action Buttons -->
       <div class="flex items-center gap-3">
-
-
+        <a href="/dashboard/org-network" class="px-4 py-2 text-sm font-semibold text-slate-700 bg-white border border-slate-200 rounded-lg shadow-sm hover:bg-slate-50 transition-colors">Org Network Graph</a>
       </div>
     </header>
 
@@ -317,6 +316,10 @@
         <div class="space-y-3">
           <h4 class="text-sm font-bold text-slate-700">Contagion Exposure (60d)</h4>
           <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm relative">
+            <div class="flex justify-between items-center border-b border-slate-50 pb-2 mb-2">
+              <span class="text-xs text-slate-500 font-medium">Raw Leave Prob:</span>
+              <span class="text-lg font-bold text-slate-400" id="drawer-retention-prob">--</span>
+            </div>
             <div class="flex justify-between items-center border-b border-slate-50 pb-2 mb-2">
               <span class="text-xs text-slate-500 font-medium">Exposure Score:</span>
               <span class="text-lg font-bold text-slate-400" id="drawer-exposure-score">--</span>
@@ -545,6 +548,7 @@
       document.getElementById("drawer-emp-id").innerText = row.EmployeeId;
       document.getElementById("drawer-role").innerText = `${row.JobRole} • ${row.Department}`;
       document.getElementById("drawer-risk-score").innerText = `${parseFloat(row.General_Risk_Score).toFixed(1)}%`;
+      document.getElementById("drawer-retention-prob").innerText = `${parseFloat(row.General_Risk_Score).toFixed(1)}%`;
 
       if (drawerChart) drawerChart.destroy();
 
@@ -577,6 +581,8 @@
           if (data.unboosted_score !== undefined && data.unboosted_score !== null) {
             document.getElementById("drawer-pre-contagion-score").innerText = `${data.unboosted_score.toFixed(1)}%`;
             document.getElementById("drawer-pre-contagion-container").classList.remove("hidden");
+            // Set the Raw Leave Prob to the unboosted score
+            document.getElementById("drawer-retention-prob").innerText = `${data.unboosted_score.toFixed(1)}%`;
           }
           
           if (data.connected_exits && data.connected_exits.length > 0) {
@@ -617,7 +623,7 @@
         let msg = "";
 
         if (actionName === 'promote') {
-          const levels = ['Entry Level', 'Junior Level', 'Mid Level', 'Senior Level', 'Executive'];
+          const levels = ['Entry Level', 'Junior Level', 'Mid Level', 'Senior Level', 'Executive Level'];
           let curIdx = levels.indexOf(activeEmpRow.JobLevel);
           if (curIdx === -1) curIdx = 0;
           let nextIdx = Math.min(curIdx + 1, levels.length - 1);

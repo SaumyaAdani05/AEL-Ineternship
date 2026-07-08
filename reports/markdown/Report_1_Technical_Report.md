@@ -96,15 +96,21 @@ AEL Internship/
 | `data/olap_warehouse.db` | Analytics warehouse and model output database |
 | `pipeline/seed_db.py` | Seeds `data/oltp_hr.db` from `data/datasets.csv` |
 | `pipeline/etl.py` | SCD Type 2 ETL from OLTP to OLAP warehouse |
+| `pipeline/graph_exporter.py` | Exports employee nodes and inferred graph edges for Neo4j |
+| `pipeline/init_neo4j.bat` | Helper script for loading graph CSVs into Neo4j |
 | `pipeline/data_pipeline.py` | Training-time data cleaning, encoding, scaling |
 | `pipeline/model.py` | XGBoost survival model and time-horizon probability logic |
-| `pipeline/production_ml.py` | Production model training, scoring, artifact saving, DB writeback |
+| `pipeline/production_ml.py` | Production model training, scoring, artifact saving, DB writeback |`r`n| `pipeline/org_hierarchy.py` | Generates organization hierarchy JSON for the network dashboard |
 | `pipeline/html_reporter.py` | Generates HTML reports in `reports/generated/` |
 | `run_pipeline.py` | Training/reporting entry point using `data/datasets.csv` |
 
 ## 5. Architecture Diagram
 
 ![Technical Architecture](images/technical_architecture.svg)
+
+The full pipeline architecture reference is also stored as a PNG:
+
+![Current Pipeline Architecture](images/pipeline_architecture_current.png)
 
 ## 6. Data and Database Flow
 
@@ -117,7 +123,8 @@ The project follows this flow:
 5. `v_ml_features` joins the latest active employee records.
 6. `pipeline/production_ml.py` trains and scores active employees.
 7. Scores are written to `flight_risk_scores`.
-8. `app/server.py` reads OLAP data and serves it to `app/dashboard.html`.
+8. `pipeline/graph_exporter.py` can export `nodes.csv` and relationship CSVs for Neo4j.
+9. `pipeline/org_hierarchy.py` generates `data/org_hierarchy.json` for the organization network view.`r`n10. `app/server.py` reads OLAP data and serves dashboard/network views.
 
 Important OLAP objects:
 
@@ -131,6 +138,15 @@ Important OLAP objects:
 | `theme_tenure` | Tenure, promotion gap, manager tenure, attrition |
 | `v_ml_features` | Active ML feature view |
 | `flight_risk_scores` | Final risk probabilities and contribution scores |
+
+Graph export objects:
+
+| Object | Use |
+|---|---|
+| `data/nodes.csv` | Employee graph nodes for Neo4j import |
+| `data/edges_manager.csv` | Inferred SAME_MANAGER relationships |
+| `data/edges_role.csv` | Inferred SAME_ROLE_DEPT relationships |
+| `data/edges_tenure.csv` | Inferred SAME_TENURE_COHORT relationships |`r`n| `data/org_hierarchy.json` | Organization network nodes consumed by `/dashboard/org-network` |
 
 ## 7. Model Flow
 
@@ -165,6 +181,14 @@ Individual Survival = Baseline Survival ^ Risk Multiplier
 Attrition Probability = 1 - Individual Survival
 ```
 
+Stage 4: Graph exposure support
+
+- `pipeline/graph_exporter.py` exports a Neo4j-ready employee graph from the warehouse.
+- Relationships are inferred from manager-like groups, same department/role, and tenure cohort.
+- The production ML writeback does not include graph exposure as a stored feature.
+- The API can query graph exposure at runtime for employee detail views and what-if inference.
+- If Neo4j is unavailable, the backend returns a deterministic mock graph score so the dashboard remains usable.
+
 ## 8. Backend API Flow
 
 Current FastAPI endpoints:
@@ -175,8 +199,9 @@ Current FastAPI endpoints:
 | `/api/employees` | GET | Paginated employee risk list with filters and sorting |
 | `/api/dashboard/stats` | GET | Dashboard summary statistics |
 | `/api/employees/{employee_id}/history` | GET | Employee SCD history and historical risk |
+| `/api/graph/exposure/{employee_id}` | GET | Neo4j exposure query with mock fallback |`r`n| `/api/org-network/tree` | GET | Organization network tree with risk scores |`r`n| `/api/org-network/exposure-history/{employee_id}` | GET | Historical peer-exit context for the org network view |
 | `/api/whatif` | POST | Temporary what-if model inference |
-| `/api/simulate-action` | POST | Commits HR action, reruns ETL/ML, reloads model cache |
+| `/api/simulate-action` | POST | Commits HR action, reruns ETL/ML, reloads model cache |`r`n| `/dashboard/org-network` | GET | Opens `app/org_network.html` |
 
 ## 9. Frontend App Flow
 
@@ -188,8 +213,9 @@ The dashboard does the following:
 4. Opens employee drawer for more detail.
 5. Shows theme contribution bars.
 6. Draws survival/risk curve.
-7. Calls `/api/whatif` for temporary scenario testing.
-8. Calls `/api/simulate-action` when user commits an HR action.
+7. Shows graph exposure context when available.
+8. Calls `/api/whatif` for temporary scenario testing.
+9. Calls `/api/simulate-action` when user commits an HR action.
 
 ## 10. Current Data Snapshot
 
@@ -199,16 +225,19 @@ Current warehouse values:
 |---|---:|
 | Active employees in `v_ml_features` | 1,489 |
 | Scored rows in `flight_risk_scores` | 1,489 |
-| Average 12-month risk | 49.19% |
-| Employees above 30% high-risk threshold | 809 |
+| Average 1-month risk | 39.94% |
+| Average 3-month risk | 47.43% |
+| Average 6-month risk | 53.86% |
+| Average 12-month risk | 61.21% |
+| Employees above 30% high-risk threshold | 1,022 |
 
 Department view:
 
 | Department | Employees | Average 12-Month Risk | High-Risk Employees |
 |---|---:|---:|---:|
-| Research & Development | 975 | 49.65% | 543 |
-| Sales | 451 | 48.00% | 229 |
-| Human Resources | 63 | 50.62% | 37 |
+| Human Resources | 63 | 63.04% | 44 |
+| Research & Development | 975 | 63.57% | 702 |
+| Sales | 451 | 55.87% | 276 |
 
 ## 11. Latest Refactor Changes Noted
 
@@ -220,6 +249,8 @@ The main change is folder organization:
 - Markdown reports moved into `reports/markdown/`.
 - Original/older project files moved into `legacy/`.
 - `run_pipeline.py`, `seed_db.py`, `etl.py`, `production_ml.py`, and `app/server.py` now mostly use updated paths.
+- Graph CSV exports and Neo4j sidecar support were added through `pipeline/graph_exporter.py`, `docker-compose.yml`, and `/api/graph/exposure/{employee_id}`.
+- The graph signal was validated separately and is treated as contextual exposure, not as a stored training feature in `production_ml.py`.
 
 Technical note:
 
@@ -246,9 +277,10 @@ Recommended technical improvements:
 - Store model version with each score row.
 - Add model drift monitoring.
 - Add fairness checks before production rollout.
-- Add automated tests for API endpoints and pipeline path handling.
+- Add automated tests for API endpoints and pipeline path handling.`r`n- Add automated tests for organization-network endpoints.
 - Add scheduled nightly ETL and ML scoring.
 
 ## 14. Conclusion
 
 The updated project is now better organized and closer to an MNC-style proof of concept. It separates app files, data files, generated reports, markdown reports, pipeline code, and legacy material. The technical pipeline reads employee data, prepares it, trains survival models, calculates risk scores, writes them into the analytics warehouse, and exposes them through a FastAPI dashboard.
+
