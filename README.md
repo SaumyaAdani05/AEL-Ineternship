@@ -144,8 +144,8 @@ http://127.0.0.1:8000
 
 An investigation was conducted to determine if attrition clusters temporally within departments (i.e. if an employee leaving triggers peers to leave). 
 1. **Validation (Phase 0):** A robust Monte Carlo permutation test over the historical database proved the actual lift was only `0.95x`. This statistically confirmed that exits do **not** cluster.
-2. **Infrastructure Built:** Although not integrated into the ML pipeline due to the negative signal, the graph infrastructure was fully built. Synthetic hierarchical data is generated via `pipeline/graph_exporter.py` and can be imported into a Neo4j Community instance via `docker-compose`.
-3. **Dashboard Fallback:** The FastAPI server connects to Neo4j to query time-decayed exposure scores. If the Docker instance is offline, it gracefully falls back to mock visual scores in the frontend Employee Detail drawer. The `production_ml.py` model explicitly excludes these scores to prevent noise.
+2. **Infrastructure Built:** Although not integrated into the ML pipeline due to the negative signal, the graph infrastructure was fully built. Synthetic hierarchical data is generated via `pipeline/graph_exporter.py` and can be imported into a local Neo4j Community instance or via `docker-compose`.
+3. **Dashboard Fallback:** The FastAPI server connects to Neo4j to query time-decayed exposure scores. If the instance is offline, it gracefully falls back to mock visual scores in the frontend Employee Detail drawer. The `production_ml.py` model explicitly excludes these scores to prevent noise.
 
 ## Model Flow
 
@@ -160,6 +160,8 @@ Basic flow:
 5. Estimate baseline survival with Nelson-Aalen.
 6. Shift survival curve for each employee based on risk.
 7. Calculate leave probability at 1M, 3M, 6M, and 12M.
+
+*(Note: The What-If simulation engine incorporates a business rule heuristic to penalize salary cuts, addressing the XGBoost model's limitation since historical data lacked negative salary increments).*
 
 Simple formula:
 
@@ -203,25 +205,11 @@ Report images and diagrams are inside:
 
 - `reports/markdown/images/`
 
-## Important Technical Note
+## Recent Updates
 
-Most files now use the updated `data/` folder paths. One file should still be reviewed:
-
-```text
-pipeline/simulator_actions.py
-```
-
-It currently uses:
-
-```python
-OLTP_PATH = "oltp_hr.db"
-```
-
-For full consistency after the folder restructuring, it should point to:
-
-```text
-data/oltp_hr.db
-```
+- **Neo4j Connectivity:** Configured the application to support standalone local Neo4j instances (disabling auth) as an alternative to Docker.
+- **ML What-If Heuristics:** Injected a dynamic penalty multiplier into the What-If simulation engine to accurately model the increased attrition risk associated with salary cuts, overcoming the historical training data's lack of negative increments.
+- **Org Graph UI:** Improved the Org Network Dashboard's mouse cursors to prevent them from blending into the light background theme.
 
 ## Business Use
 
