@@ -318,6 +318,10 @@
           <h4 class="text-sm font-bold text-slate-700">Contagion Exposure (60d)</h4>
           <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm relative">
             <div class="flex justify-between items-center border-b border-slate-50 pb-2 mb-2">
+              <span class="text-xs text-slate-500 font-medium">Retention Prob:</span>
+              <span class="text-lg font-bold text-slate-400" id="drawer-retention-prob">--</span>
+            </div>
+            <div class="flex justify-between items-center border-b border-slate-50 pb-2 mb-2">
               <span class="text-xs text-slate-500 font-medium">Exposure Score:</span>
               <span class="text-lg font-bold text-slate-400" id="drawer-exposure-score">--</span>
             </div>
@@ -545,6 +549,7 @@
       document.getElementById("drawer-emp-id").innerText = row.EmployeeId;
       document.getElementById("drawer-role").innerText = `${row.JobRole} • ${row.Department}`;
       document.getElementById("drawer-risk-score").innerText = `${parseFloat(row.General_Risk_Score).toFixed(1)}%`;
+      document.getElementById("drawer-retention-prob").innerText = `${(100 - parseFloat(row.General_Risk_Score)).toFixed(1)}%`;
 
       if (drawerChart) drawerChart.destroy();
 
