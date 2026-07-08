@@ -100,7 +100,7 @@ AEL Internship/
 | `pipeline/init_neo4j.bat` | Helper script for loading graph CSVs into Neo4j |
 | `pipeline/data_pipeline.py` | Training-time data cleaning, encoding, scaling |
 | `pipeline/model.py` | XGBoost survival model and time-horizon probability logic |
-| `pipeline/production_ml.py` | Production model training, scoring, artifact saving, DB writeback |
+| `pipeline/production_ml.py` | Production model training, scoring, artifact saving, DB writeback |`r`n| `pipeline/org_hierarchy.py` | Generates organization hierarchy JSON for the network dashboard |
 | `pipeline/html_reporter.py` | Generates HTML reports in `reports/generated/` |
 | `run_pipeline.py` | Training/reporting entry point using `data/datasets.csv` |
 
@@ -124,7 +124,7 @@ The project follows this flow:
 6. `pipeline/production_ml.py` trains and scores active employees.
 7. Scores are written to `flight_risk_scores`.
 8. `pipeline/graph_exporter.py` can export `nodes.csv` and relationship CSVs for Neo4j.
-9. `app/server.py` reads OLAP data and serves it to `app/dashboard.html`.
+9. `pipeline/org_hierarchy.py` generates `data/org_hierarchy.json` for the organization network view.`r`n10. `app/server.py` reads OLAP data and serves dashboard/network views.
 
 Important OLAP objects:
 
@@ -146,7 +146,7 @@ Graph export objects:
 | `data/nodes.csv` | Employee graph nodes for Neo4j import |
 | `data/edges_manager.csv` | Inferred SAME_MANAGER relationships |
 | `data/edges_role.csv` | Inferred SAME_ROLE_DEPT relationships |
-| `data/edges_tenure.csv` | Inferred SAME_TENURE_COHORT relationships |
+| `data/edges_tenure.csv` | Inferred SAME_TENURE_COHORT relationships |`r`n| `data/org_hierarchy.json` | Organization network nodes consumed by `/dashboard/org-network` |
 
 ## 7. Model Flow
 
@@ -199,9 +199,9 @@ Current FastAPI endpoints:
 | `/api/employees` | GET | Paginated employee risk list with filters and sorting |
 | `/api/dashboard/stats` | GET | Dashboard summary statistics |
 | `/api/employees/{employee_id}/history` | GET | Employee SCD history and historical risk |
-| `/api/graph/exposure/{employee_id}` | GET | Neo4j exposure query with mock fallback |
+| `/api/graph/exposure/{employee_id}` | GET | Neo4j exposure query with mock fallback |`r`n| `/api/org-network/tree` | GET | Organization network tree with risk scores |`r`n| `/api/org-network/exposure-history/{employee_id}` | GET | Historical peer-exit context for the org network view |
 | `/api/whatif` | POST | Temporary what-if model inference |
-| `/api/simulate-action` | POST | Commits HR action, reruns ETL/ML, reloads model cache |
+| `/api/simulate-action` | POST | Commits HR action, reruns ETL/ML, reloads model cache |`r`n| `/dashboard/org-network` | GET | Opens `app/org_network.html` |
 
 ## 9. Frontend App Flow
 
@@ -277,9 +277,10 @@ Recommended technical improvements:
 - Store model version with each score row.
 - Add model drift monitoring.
 - Add fairness checks before production rollout.
-- Add automated tests for API endpoints and pipeline path handling.
+- Add automated tests for API endpoints and pipeline path handling.`r`n- Add automated tests for organization-network endpoints.
 - Add scheduled nightly ETL and ML scoring.
 
 ## 14. Conclusion
 
 The updated project is now better organized and closer to an MNC-style proof of concept. It separates app files, data files, generated reports, markdown reports, pipeline code, and legacy material. The technical pipeline reads employee data, prepares it, trains survival models, calculates risk scores, writes them into the analytics warehouse, and exposes them through a FastAPI dashboard.
+

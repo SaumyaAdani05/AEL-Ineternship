@@ -9,7 +9,7 @@ Updated after latest project changes
 
 This project helps HR and business leaders identify employees who may be at higher risk of leaving the company. It uses employee data such as department, job role, salary, overtime, satisfaction, work-life balance, years at company, years with manager, and promotion-related information.
 
-The project has now been organized in a cleaner way. The dashboard is inside `app/`, the data is inside `data/`, generated reports are inside `reports/generated/`, and the optional graph/Neo4j layer is separated from the core ML scoring pipeline. This makes it easier for a business or technical team to understand, maintain, and audit.
+The project has now been organized in a cleaner way. The dashboard is inside `app/`, the data is inside `data/`, generated reports are inside `reports/generated/`, the optional graph/Neo4j layer is separated from the core ML scoring pipeline, and an organization-network view has been added for department and reporting-structure exploration. This makes it easier for a business or technical team to understand, maintain, and audit.
 
 Current business snapshot:
 
@@ -19,7 +19,7 @@ Current business snapshot:
 | High-risk employees above 30% threshold | 1,022 |
 | Average 12-month leave risk | 61.21% |
 | Largest department | Research & Development |
-| Main business output | Risk probability for 1M, 3M, 6M, and 12M |
+| Main business output | Risk probability for 1M, 3M, 6M, and 12M |`r`n| New dashboard support | Organization network view with risk scores |
 
 ## 2. What Problem This Solves
 
@@ -139,7 +139,7 @@ Business meaning:
 | Same tenure cohort | Check career-stage attrition pressure |
 | Recent connected exits | Understand whether risk may be socially or operationally amplified |
 
-If Neo4j is offline, the dashboard keeps working with a mock fallback. This keeps the business demo stable while still showing where graph intelligence can fit later.
+If Neo4j is offline, the dashboard keeps working with a mock fallback. This keeps the business demo stable while still showing where graph intelligence can fit later.`r`n`r`nThe new organization-network page gives business leaders a second way to review risk: by department hierarchy and employee network context, not only by the main table.
 
 ## 10. How This Can Help an MNC
 
@@ -149,7 +149,7 @@ The model can help in these areas:
 |---|---|
 | Retention planning | Focus on employees with higher risk |
 | HR budgeting | Use salary/engagement budget more carefully |
-| Workforce planning | Understand future attrition pressure by department |
+| Workforce planning | Understand future attrition pressure by department |`r`n| Organization review | Inspect risk patterns across department/network structure |
 | Manager review | Identify teams where environment factors may be high |
 | Employee engagement | Find groups where satisfaction-related risk is visible |
 | Hiring planning | Prepare replacement hiring where risk is very high |
@@ -183,3 +183,4 @@ Recommended rules:
 This project can help an MNC reduce attrition risk by giving early signals to HR and business leaders. It shows who may be at risk, when the risk may happen, and what kind of factor may be contributing.
 
 In simple words, this model helps the company act before employee attrition becomes a bigger business problem.
+

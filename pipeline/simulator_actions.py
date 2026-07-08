@@ -80,6 +80,9 @@ def trigger_nightly_etl_ml():
     print(f"  [ML] Launching: {python_exe} pipeline/production_ml.py")
     subprocess.run([python_exe, "pipeline/production_ml.py"], check=True)
     
+    print(f"  [Hierarchy] Launching: {python_exe} pipeline/org_hierarchy.py")
+    subprocess.run([python_exe, "pipeline/org_hierarchy.py"], check=True)
+    
     print("[+] Nightly ETL + ML run finished. Risk scores synchronized.")
 
 if __name__ == "__main__":
