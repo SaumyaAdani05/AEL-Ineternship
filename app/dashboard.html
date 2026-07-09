@@ -324,10 +324,12 @@
               <span class="text-xs text-slate-500 font-medium">Exposure Score:</span>
               <span class="text-lg font-bold text-slate-400" id="drawer-exposure-score">--</span>
             </div>
-            <div id="drawer-exposure-peers" class="text-xs text-slate-600 space-y-1">
-              <!-- Injected by JS -->
-              Loading...
+            <div class="h-20 w-full mt-2 relative">
+              <canvas id="drawer-exposure-chart"></canvas>
             </div>
+            <p class="text-[10px] text-slate-400 mt-2 leading-tight italic">
+              Note: This is a computed curve simulating exponential decay from real exit dates, not historically logged measurements.
+            </p>
           </div>
         </div>
 
@@ -561,7 +563,6 @@
 
       // Fetch Graph Exposure
       document.getElementById("drawer-exposure-score").innerText = "Loading...";
-      document.getElementById("drawer-exposure-peers").innerHTML = "Loading...";
       document.getElementById("drawer-pre-contagion-container").classList.add("hidden");
       
       fetch(`/api/graph/exposure/${activeEmpId}`)
@@ -585,21 +586,73 @@
             document.getElementById("drawer-retention-prob").innerText = `${data.unboosted_score.toFixed(1)}%`;
           }
           
-          if (data.connected_exits && data.connected_exits.length > 0) {
-            let html = "";
-            data.connected_exits.forEach(p => {
-              html += `<div class="flex justify-between"><span>${p.id} (${p.role})</span><span class="font-medium">w: ${p.weight}</span></div>`;
-            });
-            document.getElementById("drawer-exposure-peers").innerHTML = html;
+          if (data.curve) {
+            renderExposureChart(data.curve);
           } else {
-            document.getElementById("drawer-exposure-peers").innerHTML = `<div class="text-slate-400 italic">No recent connected exits.</div>`;
+            if (window.exposureChartInstance) {
+                window.exposureChartInstance.destroy();
+                window.exposureChartInstance = null;
+            }
           }
         })
         .catch(err => {
           console.error(err);
           document.getElementById("drawer-exposure-score").innerText = "Err";
-          document.getElementById("drawer-exposure-peers").innerHTML = `<div class="text-slate-400 italic">Could not fetch graph data.</div>`;
+          if (window.exposureChartInstance) {
+              window.exposureChartInstance.destroy();
+              window.exposureChartInstance = null;
+          }
         });
+    }
+
+    let exposureChartInstance = null;
+    function renderExposureChart(curveData) {
+      const ctx = document.getElementById("drawer-exposure-chart").getContext("2d");
+      
+      if (exposureChartInstance) {
+        exposureChartInstance.destroy();
+      }
+
+      const labels = curveData.map(d => d.day + "d");
+      const data = curveData.map(d => d.score);
+
+      exposureChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Exposure Score',
+            data: data,
+            borderColor: '#f43f5e', // rose-500
+            backgroundColor: 'rgba(244, 63, 94, 0.1)',
+            borderWidth: 2,
+            pointRadius: 0,
+            fill: true,
+            tension: 0.3
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                title: (items) => items[0].label === "0d" ? "Today" : Math.abs(parseInt(items[0].label)) + " days ago",
+                label: (item) => "Score: " + item.parsed.y
+              }
+            }
+          },
+          scales: {
+            x: { display: false },
+            y: {
+              display: false,
+              min: 0,
+              suggestedMax: Math.max(...data, 1) * 1.1
+            }
+          }
+        }
+      });
     }
 
     function closeDrawer() {

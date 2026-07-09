@@ -585,14 +585,28 @@ def get_graph_exposure(employee_id: str):
         
         # Add a fake peer if the mock score is non-trivial
         mock_peers = []
+        curve = []
+        import math
         if mock_score > 0.5:
             import random
             random.seed(employee_id)
+            days_ago = random.randint(5, 20)
             mock_peers = [{"id": f"EMP_{random.randint(1000, 1400)}", "role": "Peer", "weight": round(mock_score, 2)}]
+            
+            for d in range(60, -1, -1):
+                daily = 0
+                days_since_exit_then = days_ago - d
+                if days_since_exit_then >= 0:
+                    daily += mock_score * math.exp(-0.1 * days_since_exit_then)
+                curve.append({"day": -d, "score": round(daily, 2)})
+        else:
+            for d in range(60, -1, -1):
+                curve.append({"day": -d, "score": 0.0})
             
         return {
             "exposure_score": mock_score, 
             "connected_exits": mock_peers,
+            "curve": curve,
             "unboosted_score": round(unboosted_score, 1) if unboosted_score is not None else None
         }
         
@@ -610,12 +624,16 @@ def get_graph_exposure(employee_id: str):
             result = session.run(query, employee_id=employee_id)
             peers = []
             total_exposure = 0.0
+            import math
+            raw_peers = []
             
             for record in result:
                 weight = float(record["edge_weight"])
                 days = int(record["days_since_exit"])
-                # Time decay: fully weighted at day 0, decays to 0 at day 60
-                decay = max(0, (60 - days) / 60.0)
+                raw_peers.append({"id": record["peer_id"], "weight": weight, "days": days})
+                
+                # Exponential decay: e^(-0.1 * days)
+                decay = math.exp(-0.1 * days) if days <= 60 else 0
                 exposure = weight * decay
                 total_exposure += exposure
                 
@@ -626,6 +644,15 @@ def get_graph_exposure(employee_id: str):
                     "exposure": round(exposure, 2)
                 })
                 
+            # Build continuous curve for the past 60 days
+            curve = []
+            for d in range(60, -1, -1):
+                daily = 0.0
+                for rp in raw_peers:
+                    days_since_exit_then = rp["days"] - d
+                    if days_since_exit_then >= 0:
+                        daily += rp["weight"] * math.exp(-0.1 * days_since_exit_then)
+                curve.append({"day": -d, "score": round(daily, 2)})
             # Calculate unboosted ML risk score
             unboosted_score = None
             try:
@@ -646,6 +673,7 @@ def get_graph_exposure(employee_id: str):
             return {
                 "exposure_score": round(total_exposure, 2),
                 "connected_exits": peers,
+                "curve": curve,
                 "unboosted_score": round(unboosted_score, 1) if unboosted_score is not None else None
             }
     except Exception as e:
