@@ -10,7 +10,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import sqlite3
 import pandas as pd
 
-from pipeline.config import DATA_DIR, OLTP_PATH
+from datetime import datetime
+
+from pipeline.config import DATA_DIR, OLTP_PATH, generate_performance_score, ORDINAL_MAPPINGS
 
 CSV_PATH = os.path.join(DATA_DIR, "datasets.csv")
 
@@ -46,6 +48,37 @@ def seed_oltp():
     print(f"[*] Writing {len(df)} records to '{OLTP_PATH}'...")
     conn = sqlite3.connect(OLTP_PATH)
     df.to_sql("employees", conn, if_exists="replace", index=False)
+    
+    print("[*] Seeding 'performance_ratings' table...")
+    cursor = conn.cursor()
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS performance_ratings (
+        EmployeeId TEXT PRIMARY KEY,
+        PerformanceScore INTEGER,
+        rated_by TEXT,
+        rated_at TEXT,
+        FOREIGN KEY (EmployeeId) REFERENCES employees(EmployeeId)
+    );
+    """)
+    cursor.execute("DELETE FROM performance_ratings;")
+    
+    ratings = []
+    now = datetime.now().isoformat()
+    for _, row in df.iterrows():
+        emp_id = row['EmployeeId']
+        # Map text values to integers based on config mappings
+        js_val = ORDINAL_MAPPINGS["JobSatisfaction"].get(row['JobSatisfaction'], 2)
+        ji_val = ORDINAL_MAPPINGS["JobInvolvement"].get(row['JobInvolvement'], 2)
+        pr_val = ORDINAL_MAPPINGS["PerformanceRating"].get(row['PerformanceRating'], 2)
+        
+        score = generate_performance_score(emp_id, js_val, ji_val, pr_val)
+        ratings.append((emp_id, score, "system_seed", now))
+        
+    cursor.executemany("""
+        INSERT INTO performance_ratings (EmployeeId, PerformanceScore, rated_by, rated_at)
+        VALUES (?, ?, ?, ?)
+    """, ratings)
+    
     conn.commit()
     conn.close()
     print("[+] Seeding of OLTP completed successfully.")

@@ -94,6 +94,9 @@ def train_and_save_pipeline(df: pd.DataFrame):
     for col in X_train.select_dtypes(include=['bool']).columns:
         X_train[col] = X_train[col].astype(int)
         
+    y = df_clean[config.DURATION_COL].copy()
+    y[df_clean[config.EVENT_COL] == 0] = -y[df_clean[config.EVENT_COL] == 0]
+        
     dtrain = xgb.DMatrix(X_train, label=y)
     
     params = {
@@ -268,7 +271,28 @@ def run_predictions_and_writeback(model, cph, loo_encoder, scaler, df_encoded, X
 def execute_ml_pipeline():
     df_cohort = get_active_cohort()
     model, cph, loo_encoder, scaler, df_encoded, X_train, baseline_survival = train_and_save_pipeline(df_cohort)
-    run_predictions_and_writeback(model, cph, loo_encoder, scaler, df_encoded, X_train, baseline_survival)
-
+    
+    # Generate predictions using the INFERENCE encoding path to avoid target leakage
+    df_clean = preprocess_data(df_cohort)
+    
+    ohe_cols = [c for c in config.ONE_HOT_COLS if c in df_clean.columns]
+    df_inference = pd.get_dummies(df_clean, columns=ohe_cols, drop_first=True)
+    
+    for col in df_inference.select_dtypes(include=['bool']).columns:
+        df_inference[col] = df_inference[col].astype(int)
+        
+    df_inference = loo_encoder.transform(df_inference)
+    exclude_cols = {config.DURATION_COL, config.EVENT_COL}
+    num_cols = [
+        col for col in df_inference.columns 
+        if col not in exclude_cols and df_inference[col].dtype in [np.float64, np.int64, np.int32, np.float32, int, float]
+    ]
+    df_inference[num_cols] = scaler.transform(df_inference[num_cols])
+    df_inference = df_inference.astype(float)
+    
+    # Drop target columns for inference
+    X_inference = df_inference.drop(columns=[config.DURATION_COL, config.EVENT_COL])
+    
+    run_predictions_and_writeback(model, cph, loo_encoder, scaler, df_encoded, X_inference, baseline_survival)
 if __name__ == "__main__":
     execute_ml_pipeline()

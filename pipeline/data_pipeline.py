@@ -66,6 +66,26 @@ def preprocess_data(data: pd.DataFrame) -> pd.DataFrame:
     if missing_cols:
         raise ValueError(f"Missing required columns: {missing_cols}")
         
+    # Phase 6 validations: Asserts on data quality
+    ml_cols = config.ORDINAL_COLS + config.ONE_HOT_COLS + config.LOO_COLS + [config.EVENT_COL, config.DURATION_COL]
+    
+    # 1. No NaNs in required ML columns (except DateOfLeaving, which isn't in ml_cols anyway)
+    for c in ml_cols:
+        if c in data.columns and data[c].isna().any():
+            raise ValueError(f"NaNs found in required ML column: {c}")
+            
+    # 2. YearsAtCompany <= TotalWorkingYears
+    if 'YearsAtCompany' in data.columns and 'TotalWorkingYears' in data.columns:
+        if (data['YearsAtCompany'] > data['TotalWorkingYears']).any():
+            raise ValueError("Data consistency error: YearsAtCompany > TotalWorkingYears")
+            
+    # 3. JobSatisfaction between 1 and 4
+    if 'JobSatisfaction' in data.columns:
+        invalid_js = ~data['JobSatisfaction'].astype(str).isin({'1', '2', '3', '4', 'Low', 'Medium', 'High', 'Very High'})
+        if invalid_js.any():
+            raise ValueError("Data consistency error: JobSatisfaction must be between 1 and 4 or valid string label")
+
+        
     # Check Attrition validity
     attrition_vals = set(data[config.EVENT_COL].dropna().astype(str).unique())
     if not attrition_vals.issubset({"Yes", "No", "1", "0", "1.0", "0.0", "True", "False"}):

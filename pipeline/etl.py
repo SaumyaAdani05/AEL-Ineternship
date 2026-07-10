@@ -11,20 +11,23 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import sqlite3
 import pandas as pd
 from datetime import datetime
+import logging
 
-from pipeline.config import OLTP_PATH, OLAP_PATH
+from pipeline.config import OLTP_PATH, OLAP_PATH, get_conn
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Schema mappings for the 5 logical domains
 THEME_COLUMNS = {
     "identity": ["EmployeeId", "Age", "Gender", "MaritalStatus", "Education", "EducationField", "BusinessTravel"],
     "environment": ["EmployeeId", "Department", "JobRole", "DistanceFromHome", "OverTime", "JobLevel"],
     "compensation": ["EmployeeId", "MonthlyIncome", "PercentSalaryHike", "StockOptionLevel", "DailyRate", "HourlyRate", "MonthlyRate"],
-    "sentiment": ["EmployeeId", "EnvironmentSatisfaction", "RelationshipSatisfaction", "WorkLifeBalance", "JobInvolvement", "JobSatisfaction", "PerformanceRating"],
+    "sentiment": ["EmployeeId", "EnvironmentSatisfaction", "RelationshipSatisfaction", "WorkLifeBalance", "JobInvolvement", "JobSatisfaction", "PerformanceRating", "PerformanceScore"],
     "tenure": ["EmployeeId", "YearsAtCompany", "YearsInCurrentRole", "YearsSinceLastPromotion", "YearsWithCurrManager", "TotalWorkingYears", "TrainingTimesLastYear", "NumCompaniesWorked", "Attrition", "DateOfLeaving"]
 }
 
 def init_olap_schema():
-    print("[*] Initializing OLAP Warehouse schema...")
+    logging.info("[*] Initializing OLAP Warehouse schema...")
     conn = sqlite3.connect(OLAP_PATH)
     cursor = conn.cursor()
     
@@ -39,7 +42,7 @@ def init_olap_schema():
         HourlyRate REAL, JobInvolvement TEXT, JobLevel TEXT, JobRole TEXT,
         JobSatisfaction TEXT, MaritalStatus TEXT, MonthlyIncome REAL,
         MonthlyRate REAL, NumCompaniesWorked INTEGER, OverTime TEXT,
-        PercentSalaryHike REAL, PerformanceRating TEXT, RelationshipSatisfaction TEXT,
+        PercentSalaryHike REAL, PerformanceRating TEXT, PerformanceScore INTEGER, RelationshipSatisfaction TEXT,
         StockOptionLevel INTEGER, TotalWorkingYears INTEGER, TrainingTimesLastYear INTEGER,
         WorkLifeBalance TEXT, YearsAtCompany INTEGER, YearsInCurrentRole INTEGER,
         YearsSinceLastPromotion INTEGER, YearsWithCurrManager INTEGER,
@@ -82,7 +85,7 @@ def init_olap_schema():
     CREATE TABLE IF NOT EXISTS theme_sentiment (
         row_id INTEGER PRIMARY KEY AUTOINCREMENT,
         EmployeeId TEXT, EnvironmentSatisfaction TEXT, RelationshipSatisfaction TEXT, 
-        WorkLifeBalance TEXT, JobInvolvement TEXT, JobSatisfaction TEXT, PerformanceRating TEXT,
+        WorkLifeBalance TEXT, JobInvolvement TEXT, JobSatisfaction TEXT, PerformanceRating TEXT, PerformanceScore INTEGER,
         valid_from TEXT, valid_to TEXT, is_active INTEGER
     );
     """)
@@ -126,7 +129,7 @@ def init_olap_schema():
         i.Age, i.Gender, i.MaritalStatus, i.Education, i.EducationField, i.BusinessTravel,
         e.Department, e.JobRole, e.DistanceFromHome, e.OverTime, e.JobLevel,
         c.MonthlyIncome, c.PercentSalaryHike, c.StockOptionLevel, c.DailyRate, c.HourlyRate, c.MonthlyRate,
-        s.EnvironmentSatisfaction, s.RelationshipSatisfaction, s.WorkLifeBalance, s.JobInvolvement, s.JobSatisfaction, s.PerformanceRating,
+        s.EnvironmentSatisfaction, s.RelationshipSatisfaction, s.WorkLifeBalance, s.JobInvolvement, s.JobSatisfaction, s.PerformanceRating, s.PerformanceScore,
         t.YearsAtCompany, t.YearsInCurrentRole, t.YearsSinceLastPromotion, t.YearsWithCurrManager, t.TotalWorkingYears, t.TrainingTimesLastYear, t.NumCompaniesWorked, t.Attrition, t.DateOfLeaving
     FROM theme_identity i
     JOIN theme_environment e ON i.EmployeeId = e.EmployeeId AND e.is_active = 1
@@ -138,7 +141,7 @@ def init_olap_schema():
     
     conn.commit()
     conn.close()
-    print("[+] OLAP Warehouse schema initialized.")
+    logging.info("[+] OLAP Warehouse schema initialized.")
 
 def run_etl():
     """
@@ -149,11 +152,16 @@ def run_etl():
         
     init_olap_schema()
     
-    print("[*] Connecting databases for incremental ETL...")
+    logging.info("[*] Connecting databases for incremental ETL...")
     conn_oltp = sqlite3.connect(OLTP_PATH)
     conn_olap = sqlite3.connect(OLAP_PATH)
     
-    df_oltp = pd.read_sql("SELECT * FROM employees", conn_oltp)
+    query = """
+    SELECT e.*, p.PerformanceScore
+    FROM employees e
+    LEFT JOIN performance_ratings p ON e.EmployeeId = p.EmployeeId
+    """
+    df_oltp = pd.read_sql(query, conn_oltp)
     df_oltp.set_index("EmployeeId", inplace=True)
     
     # Load currently active records in OLAP
@@ -171,7 +179,7 @@ def run_etl():
     # Identify deletions (active in OLAP but missing in OLTP)
     deleted_ids = list(set(df_olap_active.index) - set(df_oltp.index))
     if deleted_ids:
-        print(f"[*] Found {len(deleted_ids)} terminated/deleted employees. Deactivating...")
+        logging.info(f"[*] Found {len(deleted_ids)} terminated/deleted employees. Deactivating...")
         for emp_id in deleted_ids:
             cursor.execute("UPDATE employee_history SET valid_to = ?, is_active = 0 WHERE EmployeeId = ? AND is_active = 1", (timestamp, emp_id))
             for theme in THEME_COLUMNS.keys():
@@ -231,11 +239,12 @@ def run_etl():
                     
                 updates_count += 1
                 
-    conn_olap.commit()
+        conn_olap.commit()
+        
     conn_oltp.close()
     conn_olap.close()
     
-    print(f"[+] ETL complete: {inserts_count} inserts, {updates_count} updates, {deletes_count} deletes.")
+    logging.info(f"[+] ETL complete: {inserts_count} inserts, {updates_count} updates, {deletes_count} deletes.")
 
 if __name__ == "__main__":
     run_etl()

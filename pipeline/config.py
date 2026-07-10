@@ -6,7 +6,10 @@ are defined here to keep the rest of the pipeline clean and DRY.
 """
 from typing import Dict, List
 import os
-
+import sqlite3
+import hashlib
+import random
+from contextlib import contextmanager
 # ============================================================================
 #  PATH CONFIGURATIONS
 # ============================================================================
@@ -19,8 +22,39 @@ OLTP_PATH = os.path.join(DATA_DIR, "oltp_hr.db")
 OLAP_PATH = os.path.join(DATA_DIR, "olap_warehouse.db")
 
 # ============================================================================
+#  DATABASE CONNECTION MANAGER
+# ============================================================================
+@contextmanager
+def get_conn(db_path: str):
+    """Context manager for SQLite database connections."""
+    conn = sqlite3.connect(db_path)
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+# ============================================================================
 #  COLUMN CLASSIFICATIONS
 # ============================================================================
+
+PERFORMANCE_SCORE_LABELS = {1: "Best", 2: "Good", 3: "Average", 4: "Bad"}
+HIGH_PERFORMANCE = {1, 2}
+LOW_PERFORMANCE = {3, 4}
+
+def generate_performance_score(employee_id: str, job_satisfaction: int, 
+                                 job_involvement: int, performance_rating: int) -> int:
+    """
+    Deterministic synthetic score correlated with existing sentiment fields
+    so it looks plausible, not random. Same employee always gets same score
+    on re-run (hash-seeded), but weighted toward existing satisfaction signal.
+    """
+    seed = int(hashlib.md5(employee_id.encode()).hexdigest(), 16)
+    rng = random.Random(seed)
+    # base signal: average of existing ordinal sentiment fields (already 1-4 scale, and 1-3 for performance rating)
+    base = (job_satisfaction + job_involvement + performance_rating) / 3
+    noise = rng.uniform(-0.6, 0.6)
+    score = round(base + noise)
+    return max(1, min(4, score))
 
 # Survival target columns (used by the model, excluded from features)
 DURATION_COL: str = "YearsAtCompany"
