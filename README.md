@@ -2,7 +2,7 @@
 
 This project is an HR analytics and machine learning application for predicting employee attrition risk. It uses employee data, prepares it through an ETL and ML pipeline, stores risk scores in an analytics warehouse, and shows the results in a FastAPI dashboard.
 
-The project is written in a simple MNC proof-of-concept style. It connects data engineering, survival modelling, backend APIs, and a business dashboard.
+The project is written in a simple MNC proof-of-concept style. It connects data engineering, survival modelling, backend APIs, graph analytics, and a business dashboard.
 
 ## What This Project Does
 
@@ -14,8 +14,9 @@ The project is written in a simple MNC proof-of-concept style. It connects data 
 - Calculates attrition risk for 1 month, 3 months, 6 months, and 12 months.
 - Stores model scores in `flight_risk_scores`.
 - Evaluates Attrition Contagion Graph (Network Exposure).
+- Builds department-level employee similarity networks using manager, department, project, demographic, performance, age, and risk signals.
 - Serves a dashboard using FastAPI and HTML.
-- Supports employee filtering, risk review, history, and what-if simulation.
+- Supports employee filtering, performance review, risk review, history, and what-if simulation.
 
 ## Project Structure
 
@@ -24,16 +25,22 @@ AEL Internship/
 |-- app/
 |   |-- server.py
 |   |-- dashboard.html
+|   |-- org_network_similarity.html
 |-- data/
 |   |-- datasets.csv
 |   |-- oltp_hr.db
 |   |-- olap_warehouse.db
+|   |-- similarity_network_Human_Resources.json
+|   |-- similarity_network_Research_and_Development.json
+|   |-- similarity_network_Sales.json
 |-- pipeline/
 |   |-- config.py
 |   |-- seed_db.py
 |   |-- etl.py
 |   |-- data_pipeline.py
 |   |-- graph_exporter.py
+|   |-- similarity_network.py
+|   |-- synthetic_attributes.py
 |   |-- init_neo4j.bat
 |   |-- model.py
 |   |-- production_ml.py
@@ -66,13 +73,17 @@ AEL Internship/
 
 | Component | Purpose |
 |---|---|
-| `app/server.py` | FastAPI backend and model inference APIs |
-| `app/dashboard.html` | Main dashboard UI |
+| `app/server.py` | FastAPI backend, model inference APIs, simulation jobs, and network endpoints |
+| `app/dashboard.html` | Main attrition risk dashboard UI |
+| `app/org_network_similarity.html` | Department employee similarity network dashboard |
 | `data/datasets.csv` | HR dataset |
-| `pipeline/seed_db.py` | Creates the OLTP database from the CSV |
+| `pipeline/seed_db.py` | Creates the OLTP database and seeds performance ratings |
 | `pipeline/etl.py` | Moves source data into OLAP warehouse with SCD Type 2 history |
+| `pipeline/synthetic_attributes.py` | Creates deterministic synthetic project assignments |
+| `pipeline/similarity_network.py` | Builds department-wise employee similarity graph JSON files |
 | `pipeline/production_ml.py` | Trains production models and writes risk scores |
 | `pipeline/model.py` | XGBoost survival model and time-horizon probability logic |
+| `pipeline/simulator_actions.py` | Applies HR simulation actions and reruns ETL/ML/network refresh steps |
 | `run_pipeline.py` | Standalone training/report generation script |
 | `reports/markdown/` | Technical and business reports |
 | `reports/generated/` | Generated HTML model reports |
@@ -99,12 +110,13 @@ pip install -r requirements.txt
 
 ## Run the Full Data and ML Pipeline
 
-If you want to rebuild the databases and model scores from the CSV:
+If you want to rebuild the databases, model scores, and similarity network from the CSV:
 
 ```bash
 python pipeline/seed_db.py
 python pipeline/etl.py
 python pipeline/production_ml.py
+python -m pipeline.similarity_network
 ```
 
 This will:
@@ -113,6 +125,7 @@ This will:
 2. Build/update `data/olap_warehouse.db`.
 3. Train and save model artifacts in `pipeline/`.
 4. Write employee risk scores into `flight_risk_scores`.
+5. Generate department similarity graph files in `data/`.
 
 ## Run the Dashboard
 
@@ -128,24 +141,57 @@ Then open:
 http://127.0.0.1:8000
 ```
 
+The employee similarity network is available at:
+
+```text
+http://127.0.0.1:8000/dashboard/org-network
+```
+
 ## API Endpoints
 
 | Endpoint | Method | Purpose |
 |---|---|---|
 | `/` | GET | Opens the dashboard |
+| `/api/model/metadata` | GET | Returns model metadata |
 | `/api/employees` | GET | Employee list with risk scores, filters, sorting, and pagination |
 | `/api/dashboard/stats` | GET | Dashboard summary statistics |
 | `/api/employees/{employee_id}/history` | GET | Employee history and historical risk |
-| `/api/graph/exposure/{employee_id}` | GET | Neo4j query for contagion exposure (with mock fallback) |
+| `/api/graph/exposure/{employee_id}` | GET | Neo4j query for contagion exposure, with mock fallback |
 | `/api/whatif` | POST | Temporary what-if risk calculation |
 | `/api/simulate-action` | POST | Applies simulated HR action and reruns ETL/ML |
+| `/api/simulate-action/{job_id}` | GET | Polls a background simulation job |
+| `/api/retrain` | POST | Starts a retraining job |
+| `/api/employees/{employee_id}/rating` | PATCH | Updates a manager performance rating |
+| `/api/org-network/tree` | GET | Returns organization hierarchy data |
+| `/api/similarity-network/{department}` | GET | Returns pre-generated similarity network data for a department |
+| `/api/org-network/exposure-history/{employee_id}` | GET | Returns employee exposure history for the org network view |
+| `/dashboard/org-network` | GET | Opens the employee similarity network dashboard |
 
 ## Attrition Contagion Graph (Network Exposure)
 
-An investigation was conducted to determine if attrition clusters temporally within departments (i.e. if an employee leaving triggers peers to leave). 
+An investigation was conducted to determine if attrition clusters temporally within departments, meaning whether one employee leaving triggers peers to leave.
+
 1. **Validation (Phase 0):** A robust Monte Carlo permutation test over the historical database proved the actual lift was only `0.95x`. This statistically confirmed that exits do **not** cluster.
 2. **Infrastructure Built:** Although not integrated into the ML pipeline due to the negative signal, the graph infrastructure was fully built. Synthetic hierarchical data is generated via `pipeline/graph_exporter.py` and can be imported into a local Neo4j Community instance or via `docker-compose`.
 3. **Dashboard Fallback:** The FastAPI server connects to Neo4j to query time-decayed exposure scores. If the instance is offline, it gracefully falls back to mock visual scores in the frontend Employee Detail drawer. The `production_ml.py` model explicitly excludes these scores to prevent noise.
+
+## Employee Similarity Network
+
+The project also includes a department-scoped employee similarity network. This view uses pre-generated JSON files from `pipeline/similarity_network.py` and connects employees who are most similar within the same department.
+
+Similarity is based on:
+
+- Hierarchical context: manager, department, and synthetic project.
+- Categorical attributes: gender and performance tier.
+- Continuous attributes: age and current attrition risk score.
+
+Synthetic project assignments are generated by `pipeline/synthetic_attributes.py` and are deterministic across ETL runs. The similarity generator writes one file per department:
+
+- `data/similarity_network_Human_Resources.json`
+- `data/similarity_network_Research_and_Development.json`
+- `data/similarity_network_Sales.json`
+
+When a simulation action triggers the nightly ETL/ML workflow, similarity network generation is also run so the org network dashboard stays aligned with the latest warehouse state.
 
 ## Model Flow
 
@@ -207,9 +253,12 @@ Report images and diagrams are inside:
 
 ## Recent Updates
 
-- **Neo4j Connectivity:** Configured the application to support standalone local Neo4j instances (disabling auth) as an alternative to Docker.
-- **ML What-If Heuristics:** Injected a dynamic penalty multiplier into the What-If simulation engine to accurately model the increased attrition risk associated with salary cuts, overcoming the historical training data's lack of negative increments.
-- **Org Graph UI:** Improved the Org Network Dashboard's mouse cursors to prevent them from blending into the light background theme.
+- **Employee Similarity Network:** Added a department-level org network dashboard backed by precomputed k-nearest-neighbor similarity graphs.
+- **Synthetic Project Attribute:** Added deterministic project assignment during ETL so employees can be grouped by a realistic project-like signal even though the original dataset does not contain a project column.
+- **Performance Rating Workflow:** Added manager performance rating support and filtering, with ratings used as one signal in employee similarity calculations.
+- **Neo4j Connectivity:** Configured the application to support standalone local Neo4j instances as an alternative to Docker.
+- **ML What-If Heuristics:** Injected a dynamic penalty multiplier into the What-If simulation engine to model increased attrition risk associated with salary cuts, addressing the historical training data's lack of negative increments.
+- **Org Graph UI:** Improved the Org Network Dashboard's mouse cursors to keep them readable on the light background theme.
 
 ## Business Use
 
@@ -217,7 +266,8 @@ The dashboard can help HR teams and business heads:
 
 - Identify high-risk employees early.
 - See risk by department.
-- Understand whether risk is related to compensation, environment, sentiment, tenure, or identity factors.
+- Understand whether risk is related to compensation, environment, sentiment, tenure, performance, or identity factors.
+- Explore employee similarity clusters by department.
 - Try what-if actions before applying them.
 - Support retention planning with data.
 
