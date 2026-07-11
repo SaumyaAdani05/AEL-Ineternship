@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en" class="bg-[#F8F9FA] text-gray-800 h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Organization Network</title>
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <style>
+    body { font-family: 'Inter', sans-serif; overflow: hidden; margin: 0; padding: 0; height: 100vh; display: flex; flex-direction: column; }
+    
+    /* ─── Mindmap node styling ──────────────────────────────────── */
+    .node { cursor: pointer; }
+    .node rect {
+      transition: filter 0.2s ease;
+    }
+    .node:hover rect {
+      filter: brightness(0.95) drop-shadow(0 2px 6px rgba(0,0,0,0.12));
+    }
+    .node text {
+      font-family: 'Inter', sans-serif;
+      pointer-events: none;
+      user-select: none;
+    }
+    
+    /* ─── Connector lines ──────────────────────────────────────── */
+    .link {
+      fill: none;
+      stroke-opacity: 0.6;
+      stroke-width: 2px;
+    }
+    
+    /* ─── Expand/collapse badge ─────────────────────────────────── */
+    .collapse-badge {
+      cursor: pointer;
+    }
+    .collapse-badge circle {
+      fill: #fff;
+      stroke-width: 1.5px;
+      transition: fill 0.2s;
+    }
+    .collapse-badge:hover circle {
+      fill: #f1f5f9;
+    }
+    .collapse-badge text {
+      font-family: 'Inter', sans-serif;
+      pointer-events: none;
+      user-select: none;
+      font-weight: 600;
+    }
+
+    /* ─── Graph container ──────────────────────────────────────── */
+    #graph-container {
+      flex: 1;
+      position: relative;
+      cursor: crosshair;
+    }
+    #graph-container:active {
+      cursor: move;
+    }
+
+    /* ─── Drawer ───────────────────────────────────────────────── */
+    #drawer {
+      transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+      transform: translateX(100%);
+    }
+    #drawer.open {
+      transform: translateX(0);
+    }
+
+    /* ─── Subtle dot grid background ───────────────────────────── */
+    .dot-grid {
+      background-image: radial-gradient(circle, #d1d5db 0.6px, transparent 0.6px);
+      background-size: 24px 24px;
+    }
+  </style>
+</head>
+<body class="flex flex-col h-screen">
+
+  <!-- Header -->
+  <header class="h-14 flex items-center justify-between px-6 bg-white border-b border-slate-200 shrink-0 shadow-sm z-10">
+    <div class="flex items-center gap-4">
+      <a href="/" class="text-slate-400 hover:text-slate-700 transition-colors flex items-center gap-2 text-sm font-medium" title="Back to Dashboard">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+      </a>
+      <div class="h-6 w-px bg-slate-300"></div>
+      <h2 class="text-lg font-bold text-slate-800">Organization Network</h2>
+    </div>
+    
+    <div class="flex items-center gap-4">
+      <div class="flex items-center gap-2">
+        <label for="dept-filter" class="text-sm font-medium text-slate-600">Department:</label>
+        <select id="dept-filter" class="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500">
+          <option value="">All Departments</option>
+          <option value="Research & Development">Research & Development</option>
+          <option value="Sales">Sales</option>
+          <option value="Human Resources">Human Resources</option>
+        </select>
+      </div>
+      <label class="flex items-center gap-2 text-sm font-medium text-slate-600 cursor-pointer">
+        <input type="checkbox" id="show-exited" checked class="rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+        Show Exited
+      </label>
+    </div>
+  </header>
+
+  <!-- Main Content Area -->
+  <div class="flex flex-1 relative overflow-hidden">
+    
+    <!-- Graph Area -->
+    <div id="graph-container" class="w-full h-full bg-[#FAFBFC] dot-grid"></div>
+    
+    <!-- Right Drawer -->
+    <div id="drawer" class="absolute top-0 right-0 w-80 h-full bg-white border-l border-slate-200 shadow-2xl z-20 flex flex-col">
+      <div class="p-6 border-b border-slate-100 flex justify-between items-start">
+        <div>
+          <h3 id="drawer-name" class="text-lg font-bold text-slate-800">Node</h3>
+          <p id="drawer-role" class="text-sm text-slate-500 mt-1">Role</p>
+        </div>
+        <button id="close-drawer" class="text-slate-400 hover:text-slate-600 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+      <div class="p-6 flex-1 overflow-y-auto">
+        <div class="mb-6">
+          <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Exposure Status</h4>
+          <div id="exposure-chart" class="text-sm font-medium text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-100">
+            Loading...
+          </div>
+        </div>
+        <div>
+          <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Simulation</h4>
+          <div class="flex flex-col gap-2">
+            <button id="sim-btn" class="w-full py-2 px-4 bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors">
+              Simulate Action
+            </button>
+            <button id="reset-sim-btn" class="w-full py-2 px-4 bg-slate-200 hover:bg-slate-300 text-slate-700 text-sm font-semibold rounded-lg shadow-sm transition-colors">
+              Back to Normal
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ================================================================
+    //  CONFIGURATION
+    // ================================================================
+    const NODE_RADIUS = 8;
+    
+    // ================================================================
+    //  COLOR PALETTE
+    // ================================================================
+    function getNodeColor(d) {
+      if (d.is_simulated_exit || d.is_active === 0) return "#94a3b8"; // grey for exited ones
+      
+      let score = d.risk_score || 0;
+      if (score > 75) return "#ef4444"; // red: critical
+      if (score > 50) return "#f97316"; // orange: high
+      if (score > 25) return "#3b82f6"; // blue: mid
+      return "#22c55e"; // green: normal
+    }
+
+    // ================================================================
+    //  D3 SETUP
+    // ================================================================
+    const container = document.getElementById("graph-container");
+    let width  = container.clientWidth;
+    let height = container.clientHeight;
+    
+    const svg = d3.select("#graph-container").append("svg")
+        .attr("width", width)
+        .attr("height", height);
+        
+    const g = svg.append("g");
+    
+    // Zoom and pan behavior
+    const zoom = d3.zoom()
+        .scaleExtent([0.1, 4])
+        .on("zoom", (event) => {
+            g.attr("transform", event.transform);
+        });
+    svg.call(zoom);
+    svg.on("dblclick.zoom", null);
+
+    let allNodesData = [];
+    let simulation;
+    let linkElements;
+    let nodeElements;
+
+    // ================================================================
+    //  LOAD DATA & BUILD NETWORK
+    // ================================================================
+    function loadNetwork(department) {
+        if (!department) department = "Sales"; // default
+        
+        const url = "/api/similarity-network/" + encodeURIComponent(department);
+        
+        d3.json(url).then(data => {
+            if (!data.nodes || !data.edges) return;
+            
+            allNodesData = data.nodes;
+            const edges = data.edges;
+            
+            // Base risk scores
+            allNodesData.forEach(n => {
+                n.base_risk_score = n.risk_score || 0;
+            });
+            
+            g.selectAll("*").remove();
+            if (simulation) simulation.stop();
+
+            // Tuning based on size
+            const scale = Math.max(20, 150 - Math.sqrt(allNodesData.length) * 3);
+            const chargeStr = Math.min(-15, -60 + Math.sqrt(allNodesData.length));
+            
+            simulation = d3.forceSimulation(allNodesData)
+                .force("link", d3.forceLink(edges).id(d => d.id).distance(d => (1 - d.weight) * scale))
+                .force("charge", d3.forceManyBody().strength(chargeStr))
+                .force("center", d3.forceCenter(width / 2, height / 2))
+                .force("x", d3.forceX(width / 2).strength(0.05))
+                .force("y", d3.forceY(height / 2).strength(0.05));
+                
+            linkElements = g.append("g")
+                .attr("class", "links")
+                .selectAll("line")
+                .data(edges)
+                .enter().append("line")
+                .attr("class", "link")
+                .style("stroke-width", d => Math.max(0.5, d.weight * 2))
+                .style("stroke", "#cbd5e1");
+                
+            nodeElements = g.append("g")
+                .attr("class", "nodes")
+                .selectAll("circle")
+                .data(allNodesData)
+                .enter().append("circle")
+                .attr("r", NODE_RADIUS)
+                .style("fill", d => getNodeColor(d))
+                .style("stroke", "#fff")
+                .style("stroke-width", "1.5px")
+                .on("click", (event, d) => {
+                    event.stopPropagation();
+                    showDrawer(d);
+                })
+                .call(d3.drag()
+                    .on("start", dragstarted)
+                    .on("drag", dragged)
+                    .on("end", dragended));
+                    
+            nodeElements.append("title")
+                .text(d => d.id + " - " + d.role);
+
+            simulation.on("tick", () => {
+                linkElements
+                    .attr("x1", d => d.source.x)
+                    .attr("y1", d => d.source.y)
+                    .attr("x2", d => d.target.x)
+                    .attr("y2", d => d.target.y);
+
+                nodeElements
+                    .attr("cx", d => d.x)
+                    .attr("cy", d => d.y);
+            });
+            
+            // Auto-zoom to fit network
+            svg.transition().duration(750).call(
+                zoom.transform,
+                d3.zoomIdentity.translate(width/2, height/2).scale(0.8).translate(-width/2, -height/2)
+            );
+        }).catch(err => {
+            console.error("Error loading graph", err);
+            g.selectAll("*").remove();
+            g.append("text")
+             .attr("x", width/2)
+             .attr("y", height/2)
+             .attr("text-anchor", "middle")
+             .text("Failed to load network for " + department);
+        });
+    }
+    
+    function dragstarted(event, d) {
+        if (!event.active) simulation.alphaTarget(0.3).restart();
+        d.fx = d.x;
+        d.fy = d.y;
+    }
+    function dragged(event, d) {
+        d.fx = event.x;
+        d.fy = event.y;
+    }
+    function dragended(event, d) {
+        if (!event.active) simulation.alphaTarget(0);
+        d.fx = null;
+        d.fy = null;
+    }
+
+    // ================================================================
+    //  DRAWER LOGIC & SIMULATION
+    // ================================================================
+    const drawer = document.getElementById('drawer');
+    const closeDrawerBtn = document.getElementById('close-drawer');
+    let currentDrawerNodeData = null;
+    
+    function showDrawer(data) {
+        currentDrawerNodeData = data;
+        drawer.classList.add('open');
+        document.getElementById('drawer-name').innerText = data.id;
+        document.getElementById('drawer-role').innerText = `${data.department || ''} — ${data.role || ''}`;
+        
+        const expChart = document.getElementById('exposure-chart');
+        expChart.innerText = "Loading exposure…";
+        
+        d3.json("/api/org-network/exposure-history/" + data.id).then(res => {
+            const peers = res.peers || [];
+            if (peers.length > 0) {
+                expChart.innerHTML = `<div class="font-semibold text-red-600 mb-1">${peers.length} Peers Exited</div>
+                                      <ul class="list-disc pl-4 space-y-0.5">
+                                      ${peers.slice(0, 5).map(p => `<li class="text-slate-600">${p.id} <span class="text-slate-400">(${p.exit_date})</span></li>`).join('')}
+                                      </ul>`;
+            } else {
+                expChart.innerHTML = '<span class="text-green-600">✓</span> No peers exited recently. Risk is minimal.';
+            }
+        }).catch(() => {
+            expChart.innerText = "Failed to load exposure.";
+        });
+    }
+    
+    closeDrawerBtn.addEventListener('click', () => {
+        drawer.classList.remove('open');
+        currentDrawerNodeData = null;
+    });
+
+    document.getElementById('sim-btn').addEventListener('click', () => {
+        if (!currentDrawerNodeData) return;
+        
+        currentDrawerNodeData.is_simulated_exit = true;
+        
+        // Ripple effect: Increase risk for close peers (simplified logic for network view)
+        if (allNodesData) {
+            allNodesData.forEach(n => {
+                if (n.id !== currentDrawerNodeData.id && 
+                   (n.department === currentDrawerNodeData.department)) {
+                    n.risk_score = (n.risk_score || 0) + 10; // bump risk
+                }
+            });
+        }
+        
+        if (nodeElements) {
+            nodeElements.style("fill", d => getNodeColor(d));
+        }
+        
+        const btn = document.getElementById('sim-btn');
+        btn.innerText = "Simulated!";
+        setTimeout(() => { btn.innerText = "Simulate Action"; }, 2000);
+    });
+
+    document.getElementById('reset-sim-btn').addEventListener('click', () => {
+        if (allNodesData) {
+            allNodesData.forEach(n => {
+                n.is_simulated_exit = false;
+                n.risk_score = n.base_risk_score;
+            });
+        }
+        if (nodeElements) {
+            nodeElements.style("fill", d => getNodeColor(d));
+        }
+    });
+
+    // ================================================================
+    //  EVENT LISTENERS
+    // ================================================================
+    document.getElementById('dept-filter').addEventListener('change', e => {
+        let val = e.target.value;
+        if (!val) {
+            val = "Sales";
+            e.target.value = "Sales";
+        }
+        loadNetwork(val);
+    });
+
+    document.getElementById('show-exited').addEventListener('change', () => {
+        if (nodeElements) {
+            const showExited = document.getElementById('show-exited').checked;
+            nodeElements.style("fill", d => {
+                if ((!d.is_active || d.is_simulated_exit) && showExited) return "#94a3b8";
+                return getNodeColor(d);
+            });
+        }
+    });
+
+    window.addEventListener('resize', () => {
+        width = container.clientWidth;
+        height = container.clientHeight;
+        svg.attr("width", width).attr("height", height);
+        if (simulation) {
+            simulation.force("center", d3.forceCenter(width / 2, height / 2));
+            simulation.alpha(0.3).restart();
+        }
+    });
+
+    // ================================================================
+    //  INITIALIZE
+    // ================================================================
+    document.getElementById('dept-filter').value = "Sales";
+    loadNetwork("Sales");
+  </script>
+</body>
+</html>

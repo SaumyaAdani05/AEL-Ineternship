@@ -34,49 +34,64 @@ warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
 sys.stdout.reconfigure(encoding='utf-8')
 
 # Paths and configuration
-from pipeline.config import OLAP_PATH, MODEL_DIR
+from pipeline.config import OLAP_PATH, MODEL_DIR, DATA_DIR
 
 
-# In-memory pipeline cache
-PIPELINE = {}
+# In-memory pipeline cache and jobs
+import threading
+import uuid
+import logging
 
-def load_pipeline():
-    """
-    Load model checkpoints and encoders from the pipeline directory.
-    """
-    scaler_path = os.path.join(MODEL_DIR, "scaler.pkl")
-    loo_path = os.path.join(MODEL_DIR, "loo_encoder.pkl")
-    cph_path = os.path.join(MODEL_DIR, "model_cph.pkl")
-    xgb_path = os.path.join(MODEL_DIR, "model_xgb.json")
-    base_path = os.path.join(MODEL_DIR, "baseline_survival.pkl")
-    
-    if not (os.path.exists(scaler_path) and os.path.exists(xgb_path)):
-        raise RuntimeError("Model checkpoints not found. Run pipeline/production_ml.py first.")
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+class PipelineStore:
+    def __init__(self):
+        self._pipeline = {}
+        self.lock = threading.Lock()
         
-    with open(scaler_path, "rb") as f:
-        PIPELINE["scaler"] = pickle.load(f)
-    with open(loo_path, "rb") as f:
-        PIPELINE["loo_encoder"] = pickle.load(f)
-    with open(cph_path, "rb") as f:
-        PIPELINE["cph"] = pickle.load(f)
-    with open(base_path, "rb") as f:
-        PIPELINE["baseline_survival"] = pickle.load(f)
-        
-    # Load XGBoost model
-    model = xgb.Booster()
-    model.load_model(xgb_path)
-    PIPELINE["model_xgb"] = model
-    
-    # Store training feature names
-    PIPELINE["feature_names"] = model.feature_names
-    print("[+] Model checkpoints successfully loaded into FastAPI cache.")
+    def reload(self):
+        with self.lock:
+            scaler_path = os.path.join(MODEL_DIR, "scaler.pkl")
+            loo_path = os.path.join(MODEL_DIR, "loo_encoder.pkl")
+            cph_path = os.path.join(MODEL_DIR, "model_cph.pkl")
+            xgb_path = os.path.join(MODEL_DIR, "model_xgb.json")
+            base_path = os.path.join(MODEL_DIR, "baseline_survival.pkl")
+            
+            if not (os.path.exists(scaler_path) and os.path.exists(xgb_path)):
+                raise RuntimeError("Model checkpoints not found. Run pipeline/production_ml.py first.")
+                
+            with open(scaler_path, "rb") as f:
+                self._pipeline["scaler"] = pickle.load(f)
+            with open(loo_path, "rb") as f:
+                self._pipeline["loo_encoder"] = pickle.load(f)
+            with open(cph_path, "rb") as f:
+                self._pipeline["cph"] = pickle.load(f)
+            with open(base_path, "rb") as f:
+                self._pipeline["baseline_survival"] = pickle.load(f)
+                
+            # Load XGBoost model
+            model = xgb.Booster()
+            model.load_model(xgb_path)
+            self._pipeline["model_xgb"] = model
+            
+            # Store training feature names
+            self._pipeline["feature_names"] = model.feature_names
+            logging.info("[+] Model checkpoints successfully loaded into FastAPI cache.")
+
+    def get(self, key):
+        with self.lock:
+            return self._pipeline.get(key)
+
+pipeline_store = PipelineStore()
+JOB_STATUS = {}
 
 from contextlib import asynccontextmanager
+from pipeline.config import get_conn
 
 @asynccontextmanager
 async def lifespan(app):
     """Modern lifespan handler replacing deprecated on_event('startup')."""
-    load_pipeline()
+    pipeline_store.reload()
     
     # Initialize Neo4j driver
     try:
@@ -84,7 +99,7 @@ async def lifespan(app):
         driver.verify_connectivity()
         app.state.neo4j_driver = driver
     except Exception as e:
-        print(f"[!] Warning: Could not connect to Neo4j. Graph features will run in mock mode. Error: {e}")
+        logging.warning(f"[!] Warning: Could not connect to Neo4j. Graph features will run in mock mode. Error: {e}")
         app.state.neo4j_driver = None
         
     yield
@@ -119,6 +134,9 @@ class ActionRequest(BaseModel):
     EmployeeId: str
     params: ActionParams
 
+class RatingRequest(BaseModel):
+    score: int = Field(..., ge=1, le=4)
+
 # ============================================================================
 #  API ENDPOINTS
 # ============================================================================
@@ -128,6 +146,11 @@ def get_dashboard():
     dash_path = os.path.join(os.path.dirname(__file__), "dashboard.html")
     with open(dash_path, "r", encoding="utf-8") as f:
         return f.read()
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    from fastapi.responses import Response
+    return Response(status_code=204)
 
 import json
 @app.get("/api/model/metadata")
@@ -147,20 +170,19 @@ def list_employees(
     sort_by: str = "General_Risk_Score",
     sort_dir: str = "desc",
     department: str = "",
+    performance_filter: str = "all",
 ):
-    conn = sqlite3.connect(OLAP_PATH)
-    
-    # Get active cohort with their current computed risk scores
-    query = """
-    SELECT 
-        v.*,
-        r.Prob_Leave_1M, r.Prob_Leave_3M, r.Prob_Leave_6M, r.Prob_Leave_12M, r.General_Risk_Score,
-        r.Contrib_Identity, r.Contrib_Environment, r.Contrib_Compensation, r.Contrib_Sentiment, r.Contrib_Tenure
-    FROM v_ml_features v
-    LEFT JOIN flight_risk_scores r ON v.EmployeeId = r.EmployeeId
-    """
-    df = pd.read_sql(query, conn)
-    conn.close()
+    with get_conn(OLAP_PATH) as conn:
+        # Get active cohort with their current computed risk scores
+        query = """
+        SELECT 
+            v.*,
+            r.Prob_Leave_1M, r.Prob_Leave_3M, r.Prob_Leave_6M, r.Prob_Leave_12M, r.General_Risk_Score,
+            r.Contrib_Identity, r.Contrib_Environment, r.Contrib_Compensation, r.Contrib_Sentiment, r.Contrib_Tenure
+        FROM v_ml_features v
+        LEFT JOIN flight_risk_scores r ON v.EmployeeId = r.EmployeeId
+        """
+        df = pd.read_sql(query, conn)
     
     # Unique departments for filter dropdown
     departments = sorted(df["Department"].dropna().unique().tolist())
@@ -173,46 +195,101 @@ def list_employees(
     if department:
         df = df[df["Department"] == department]
         
-    # Apply status filter
-    # High risk = exceeds 30% attrition threshold at any horizon
-    is_high_risk = (df["Prob_Leave_1M"] >= 0.30) | (df["Prob_Leave_3M"] >= 0.30) | (df["Prob_Leave_6M"] >= 0.30) | (df["Prob_Leave_12M"] >= 0.30)
+    # Pre-compute exposure scores for ALL employees (batch) BEFORE filtering/sorting
+    import hashlib
+    import math
+    from pipeline.config import PERFORMANCE_SCORE_LABELS
+    driver = app.state.neo4j_driver
+    exposure_map = {}
     
-    total_active = len(is_high_risk)
+    if driver:
+        try:
+            batch_query = """
+            MATCH (e:Employee)-[r:SAME_MANAGER|SAME_ROLE_DEPT|SAME_TENURE_COHORT]-(peer:Employee)
+            WHERE e.id IN $emp_ids AND peer.isActive = false AND peer.exitDate <> ''
+            WITH e, r, duration.inDays(date(peer.exitDate), date()).days AS days_since_exit
+            WHERE days_since_exit <= 60
+            WITH e.id AS employee_id, r.weight * exp(-0.1 * days_since_exit) AS contribution
+            RETURN employee_id, sum(contribution) AS exposure_score
+            """
+            with driver.session() as session:
+                result = session.run(batch_query, emp_ids=df["EmployeeId"].tolist())
+                for record in result:
+                    exposure_map[record["employee_id"]] = float(record["exposure_score"])
+        except Exception:
+            pass
+    
+    if not exposure_map:
+        # Mock fallback when Neo4j is offline
+        for _, r in df[["EmployeeId", "General_Risk_Score"]].iterrows():
+            emp_id = r["EmployeeId"]
+            raw_score = float(r["General_Risk_Score"])
+            seed_val = int(hashlib.md5(emp_id.encode()).hexdigest()[:8], 16) % 1000
+            base_exposure = seed_val / 1000.0
+            if raw_score > 50:
+                exposure_map[emp_id] = round(base_exposure * 2.5, 2)
+            elif raw_score > 25:
+                exposure_map[emp_id] = round(base_exposure * 1.2, 2)
+            else:
+                exposure_map[emp_id] = round(base_exposure * 0.4, 2)
+    
+    # Add boosted score columns
+    df["Exposure_Score"] = df["EmployeeId"].map(lambda x: exposure_map.get(x, 0.0))
+    df["Boosted_Risk_Score"] = (df["General_Risk_Score"] * (1 + df["Exposure_Score"])).clip(upper=100.0)
+    
+    # Stats using boosted scores (consistent with what the UI displays)
+    total_active = len(df)
+    is_high_risk = df["Boosted_Risk_Score"] >= 50
     high_risk_count = int(is_high_risk.sum())
     
-    # Risk distribution buckets for donut chart
+    # Risk distribution buckets for donut chart (using boosted scores)
     risk_distribution = {
-        "critical": int((df["General_Risk_Score"] >= 80).sum()),
-        "high": int(((df["General_Risk_Score"] >= 50) & (df["General_Risk_Score"] < 80)).sum()),
-        "medium": int(((df["General_Risk_Score"] >= 20) & (df["General_Risk_Score"] < 50)).sum()),
-        "low": int((df["General_Risk_Score"] < 20).sum()),
+        "critical": int((df["Boosted_Risk_Score"] >= 80).sum()),
+        "high": int(((df["Boosted_Risk_Score"] >= 50) & (df["Boosted_Risk_Score"] < 80)).sum()),
+        "medium": int(((df["Boosted_Risk_Score"] >= 20) & (df["Boosted_Risk_Score"] < 50)).sum()),
+        "low": int((df["Boosted_Risk_Score"] < 20).sum()),
     }
     
+    # Apply status filter using boosted score (matches displayed badge)
     if status == "high":
         df = df[is_high_risk]
     elif status == "normal":
         df = df[~is_high_risk]
         
+    # Apply performance filter
+    if performance_filter == "high":
+        df = df[df["PerformanceScore"].isin([1, 2])]
+    elif performance_filter == "low":
+        df = df[df["PerformanceScore"].isin([3, 4])]
+        
     total_filtered = len(df)
     
-    # Sort
+    # Sort — use boosted score when sorting by risk
     valid_sort_cols = {
         "General_Risk_Score", "MonthlyIncome", "YearsAtCompany",
         "Prob_Leave_1M", "Prob_Leave_12M", "Age", "EmployeeId"
     }
     if sort_by in valid_sort_cols:
-        df = df.sort_values(sort_by, ascending=(sort_dir == "asc"))
+        actual_sort = "Boosted_Risk_Score" if sort_by == "General_Risk_Score" else sort_by
+        df = df.sort_values(actual_sort, ascending=(sort_dir == "asc"))
     else:
-        df = df.sort_values("General_Risk_Score", ascending=False)
+        df = df.sort_values("Boosted_Risk_Score", ascending=False)
     
     # Paginate
     start = (page - 1) * limit
     end = start + limit
     df_slice = df.iloc[start:end]
     
-    # Format probabilities as percentages for display
+    # Build response using pre-computed exposure scores
     employees_list = []
+
     for _, row in df_slice.iterrows():
+        emp_id = row["EmployeeId"]
+        perf_score = int(row.get("PerformanceScore", 3)) if pd.notna(row.get("PerformanceScore")) else 3
+        unboosted_score = float(row["General_Risk_Score"])
+        exposure_score = round(float(row["Exposure_Score"]), 2)
+        boosted_score = round(float(row["Boosted_Risk_Score"]), 1)
+        
         employees_list.append({
             "EmployeeId": row["EmployeeId"],
             "Age": int(row["Age"]),
@@ -224,11 +301,14 @@ def list_employees(
             "OverTime": row["OverTime"],
             "YearsAtCompany": int(row["YearsAtCompany"]),
             "YearsWithCurrManager": int(row["YearsWithCurrManager"]),
+            "PerformanceScore": perf_score,
+            "PerformanceLabel": PERFORMANCE_SCORE_LABELS.get(perf_score, "Unknown"),
             "Prob_1M": f"{row['Prob_Leave_1M'] * 100:.1f}%",
             "Prob_3M": f"{row['Prob_Leave_3M'] * 100:.1f}%",
             "Prob_6M": f"{row['Prob_Leave_6M'] * 100:.1f}%",
             "Prob_12M": f"{row['Prob_Leave_12M'] * 100:.1f}%",
-            "General_Risk_Score": round(float(row["General_Risk_Score"]), 1),
+            "General_Risk_Score": boosted_score,
+            "Unboosted_Risk_Score": round(unboosted_score, 1),
             "is_high_risk": bool(any(row[p] >= 0.30 for p in ["Prob_Leave_1M", "Prob_Leave_3M", "Prob_Leave_6M", "Prob_Leave_12M"])),
             "contributions": {
                 "identity": round(float(row["Contrib_Identity"]), 1),
@@ -250,19 +330,17 @@ def list_employees(
 
 @app.get("/api/dashboard/stats")
 def get_dashboard_stats():
-    conn = sqlite3.connect(OLAP_PATH)
-    
-    query = """
-    SELECT 
-        v.Department,
-        r.General_Risk_Score,
-        r.Prob_Leave_1M, r.Prob_Leave_3M, r.Prob_Leave_6M, r.Prob_Leave_12M,
-        r.Contrib_Identity, r.Contrib_Environment, r.Contrib_Compensation, r.Contrib_Sentiment, r.Contrib_Tenure
-    FROM v_ml_features v
-    JOIN flight_risk_scores r ON v.EmployeeId = r.EmployeeId
-    """
-    df = pd.read_sql(query, conn)
-    conn.close()
+    with get_conn(OLAP_PATH) as conn:
+        query = """
+        SELECT 
+            v.Department,
+            r.General_Risk_Score,
+            r.Prob_Leave_1M, r.Prob_Leave_3M, r.Prob_Leave_6M, r.Prob_Leave_12M,
+            r.Contrib_Identity, r.Contrib_Environment, r.Contrib_Compensation, r.Contrib_Sentiment, r.Contrib_Tenure
+        FROM v_ml_features v
+        JOIN flight_risk_scores r ON v.EmployeeId = r.EmployeeId
+        """
+        df = pd.read_sql(query, conn)
     
     if df.empty:
         return {}
@@ -304,9 +382,9 @@ def encode_single_row(row_df: pd.DataFrame) -> pd.DataFrame:
     df_clean = df_clean.reset_index(drop=True)
     
     # 2. Re-create nominal One-Hot dummies
-    # We must match the exact feature names list in PIPELINE["feature_names"]
+    # We must match the exact feature names list in pipeline_store.get("feature_names")
     # Build a base matrix containing 1 row of all zeros
-    cols = PIPELINE["feature_names"]
+    cols = pipeline_store.get("feature_names")
     x_encoded = pd.DataFrame(0, index=[0], columns=cols)
     
     # Populate numeric and ordinal fields (skip text columns — they're handled by OHE/LOO below)
@@ -318,10 +396,11 @@ def encode_single_row(row_df: pd.DataFrame) -> pd.DataFrame:
             if isinstance(val, str):
                 continue
             # Scale continuous columns
-            if col in PIPELINE["scaler"].feature_names_in_:
-                col_idx = list(PIPELINE["scaler"].feature_names_in_).index(col)
-                min_val = PIPELINE["scaler"].data_min_[col_idx]
-                max_val = PIPELINE["scaler"].data_max_[col_idx]
+            scaler = pipeline_store.get("scaler")
+            if col in scaler.feature_names_in_:
+                col_idx = list(scaler.feature_names_in_).index(col)
+                min_val = scaler.data_min_[col_idx]
+                max_val = scaler.data_max_[col_idx]
                 scaled_val = (val - min_val) / (max_val - min_val) if (max_val - min_val) > 0 else 0.0
                 x_encoded.loc[0, col] = scaled_val
             else:
@@ -341,18 +420,27 @@ def encode_single_row(row_df: pd.DataFrame) -> pd.DataFrame:
     # Encoder mapping: dict of {col_name: DataFrame(sum, count)} — mean = sum/count.
     loo_cols = [c for c in config.LOO_COLS if c in df_clean.columns]
     if loo_cols:
-        encoder = PIPELINE["loo_encoder"]
+        encoder = pipeline_store.get("loo_encoder")
         for col in loo_cols:
             if col in cols and hasattr(encoder, 'mapping') and col in encoder.mapping:
                 raw_val = df_clean.loc[0, col]
                 mapping_df = encoder.mapping[col]  # DataFrame with 'sum' and 'count'
                 if raw_val in mapping_df.index:
                     row_data = mapping_df.loc[raw_val]
-                    x_encoded.loc[0, col] = float(row_data['sum'] / row_data['count'])
+                    raw_mean = float(row_data['sum'] / row_data['count'])
                 else:
                     # Unseen category — use overall mean across all categories
-                    overall_mean = float(mapping_df['sum'].sum() / mapping_df['count'].sum())
-                    x_encoded.loc[0, col] = overall_mean
+                    raw_mean = float(mapping_df['sum'].sum() / mapping_df['count'].sum())
+                
+                # Scale the LOO column just like production_ml does
+                scaler = pipeline_store.get("scaler")
+                if col in scaler.feature_names_in_:
+                    col_idx = list(scaler.feature_names_in_).index(col)
+                    min_val = scaler.data_min_[col_idx]
+                    max_val = scaler.data_max_[col_idx]
+                    x_encoded.loc[0, col] = (raw_mean - min_val) / (max_val - min_val) if (max_val - min_val) > 0 else 0.0
+                else:
+                    x_encoded.loc[0, col] = raw_mean
                 
     # Ensure float types to prevent XGBoost type mismatch
     x_encoded = x_encoded.astype(float)
@@ -362,8 +450,8 @@ def predict_risk_profile(x_encoded: pd.DataFrame, employee_id: str = None) -> Di
     """
     Calculates time-horizon probabilities for an encoded feature vector.
     """
-    model = PIPELINE["model_xgb"]
-    baseline_survival = PIPELINE["baseline_survival"]
+    model = pipeline_store.get("model_xgb")
+    baseline_survival = pipeline_store.get("baseline_survival")
     
     dmatrix = xgb.DMatrix(x_encoded)
     raw_pred = model.predict(dmatrix, output_margin=True)[0]
@@ -397,16 +485,14 @@ def predict_risk_profile(x_encoded: pd.DataFrame, employee_id: str = None) -> Di
 
 @app.get("/api/employees/{employee_id}/history")
 def get_employee_history(employee_id: str):
-    conn = sqlite3.connect(OLAP_PATH)
-    
-    # Query all SCD Type 2 history records for this employee
-    query = """
-    SELECT * FROM employee_history 
-    WHERE EmployeeId = ? 
-    ORDER BY valid_from ASC
-    """
-    df_hist = pd.read_sql(query, conn, params=(employee_id,))
-    conn.close()
+    with get_conn(OLAP_PATH) as conn:
+        # Query all SCD Type 2 history records for this employee
+        query = """
+        SELECT * FROM employee_history 
+        WHERE EmployeeId = ? 
+        ORDER BY valid_from ASC
+        """
+        df_hist = pd.read_sql(query, conn, params=(employee_id,))
     
     if df_hist.empty:
         raise HTTPException(status_code=404, detail=f"Employee {employee_id} history not found.")
@@ -446,11 +532,10 @@ def get_employee_history(employee_id: str):
 
 @app.post("/api/whatif")
 def calculate_whatif(req: WhatIfRequest):
-    conn = sqlite3.connect(OLAP_PATH)
-    # Fetch active record from Layer 2
-    query = "SELECT * FROM v_ml_features WHERE EmployeeId = ?"
-    df_active = pd.read_sql(query, conn, params=(req.EmployeeId,))
-    conn.close()
+    with get_conn(OLAP_PATH) as conn:
+        # Fetch active record from Layer 2
+        query = "SELECT * FROM v_ml_features WHERE EmployeeId = ?"
+        df_active = pd.read_sql(query, conn, params=(req.EmployeeId,))
     
     if df_active.empty:
         raise HTTPException(status_code=404, detail=f"Employee {req.EmployeeId} not found.")
@@ -504,47 +589,142 @@ def calculate_whatif(req: WhatIfRequest):
         "General_Risk_Score": round(profile['General_Risk_Score'], 1)
     }
 
-@app.post("/api/simulate-action")
-def simulate_action(req: ActionRequest):
-    # Import pipeline simulator
-    sys.path.append(os.getcwd())
+from fastapi import BackgroundTasks
+from abc import ABC, abstractmethod
+
+class ActionStrategy(ABC):
+    @abstractmethod
+    def apply(self, employee_id: str, params: ActionParams) -> None: ...
+
+class PromoteStrategy(ActionStrategy):
+    def apply(self, employee_id: str, params: ActionParams):
+        from pipeline import simulator_actions as sa
+        if params.JobRole is None or params.JobLevel is None or params.MonthlyIncome is None:
+            raise HTTPException(status_code=400, detail="Missing required parameters for promotion")
+        sa.promote_employee(employee_id, params.JobRole, params.JobLevel, float(params.MonthlyIncome))
+
+class OvertimeStrategy(ActionStrategy):
+    def apply(self, employee_id: str, params: ActionParams):
+        from pipeline import simulator_actions as sa
+        if params.OverTime is None:
+            raise HTTPException(status_code=400, detail="Missing OverTime parameter")
+        sa.change_overtime(employee_id, params.OverTime)
+
+class ManagerChangeStrategy(ActionStrategy):
+    def apply(self, employee_id: str, params: ActionParams):
+        from pipeline import simulator_actions as sa
+        if params.YearsWithCurrManager is None:
+            raise HTTPException(status_code=400, detail="Missing YearsWithCurrManager parameter")
+        sa.change_manager_tenure(employee_id, int(params.YearsWithCurrManager))
+
+class SalaryHikeStrategy(ActionStrategy):
+    def apply(self, employee_id: str, params: ActionParams):
+        from pipeline import simulator_actions as sa
+        if params.PercentSalaryHike is None:
+            raise HTTPException(status_code=400, detail="Missing PercentSalaryHike parameter")
+        sa.adjust_salary(employee_id, float(params.PercentSalaryHike))
+
+STRATEGIES = {
+    "promote": PromoteStrategy(),
+    "overtime": OvertimeStrategy(),
+    "manager_change": ManagerChangeStrategy(),
+    "salary_hike": SalaryHikeStrategy()
+}
+
+def run_simulation_task(job_id: str, strategy: ActionStrategy, employee_id: str, params: ActionParams):
+    JOB_STATUS[job_id] = "running"
     from pipeline import simulator_actions as sa
-    
     try:
-        if req.action == "promote":
-            if req.params.JobRole is None or req.params.JobLevel is None or req.params.MonthlyIncome is None:
-                raise HTTPException(status_code=400, detail="Missing required parameters for promotion")
-            sa.promote_employee(
-                req.EmployeeId, 
-                req.params.JobRole, 
-                req.params.JobLevel, 
-                float(req.params.MonthlyIncome)
-            )
-        elif req.action == "overtime":
-            if req.params.OverTime is None:
-                raise HTTPException(status_code=400, detail="Missing OverTime parameter")
-            sa.change_overtime(req.EmployeeId, req.params.OverTime)
-        elif req.action == "manager_change":
-            if req.params.YearsWithCurrManager is None:
-                raise HTTPException(status_code=400, detail="Missing YearsWithCurrManager parameter")
-            sa.change_manager_tenure(req.EmployeeId, int(req.params.YearsWithCurrManager))
-        elif req.action == "salary_hike":
-            if req.params.PercentSalaryHike is None:
-                raise HTTPException(status_code=400, detail="Missing PercentSalaryHike parameter")
-            sa.adjust_salary(req.EmployeeId, float(req.params.PercentSalaryHike))
-        else:
-            raise HTTPException(status_code=400, detail=f"Unknown action: {req.action}")
-            
-        # Re-run ETL and ML pipelines to commit SCD Type 2 and update score views
+        strategy.apply(employee_id, params)
         sa.trigger_nightly_etl_ml()
-        
-        # Reload FastAPI pipeline cache in case baseline or parameters shifted
-        load_pipeline()
-        
+        pipeline_store.reload()
+        JOB_STATUS[job_id] = "completed"
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Simulation transaction failed: {str(e)}")
+        JOB_STATUS[job_id] = f"failed: {str(e)}"
+        logging.error(f"Simulation task failed: {e}")
+
+@app.post("/api/simulate-action")
+def simulate_action(req: ActionRequest, background_tasks: BackgroundTasks):
+    strategy = STRATEGIES.get(req.action)
+    if not strategy:
+        raise HTTPException(400, f"Unknown action: {req.action}")
         
-    return {"status": "success", "message": "Simulation action completed and models recalculated."}
+    # Check for concurrent running simulations
+    if any(status == "running" for status in JOB_STATUS.values()):
+        raise HTTPException(status_code=409, detail="Another simulation is currently running.")
+        
+    job_id = str(uuid.uuid4())
+    JOB_STATUS[job_id] = "pending"
+    background_tasks.add_task(run_simulation_task, job_id, strategy, req.EmployeeId, req.params)
+    
+    return {"status": "accepted", "job_id": job_id, "message": "Simulation action accepted and processing in background."}
+
+@app.get("/api/simulate-action/{job_id}")
+def get_simulation_status(job_id: str):
+    if job_id not in JOB_STATUS:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return {"job_id": job_id, "status": JOB_STATUS[job_id]}
+
+def run_retrain_task(job_id: str):
+    JOB_STATUS[job_id] = "running"
+    from pipeline import simulator_actions as sa
+    try:
+        sa.trigger_nightly_etl_ml()
+        pipeline_store.reload()
+        JOB_STATUS[job_id] = "completed"
+    except Exception as e:
+        JOB_STATUS[job_id] = f"failed: {str(e)}"
+        logging.error(f"Retrain task failed: {e}")
+
+@app.post("/api/retrain")
+def retrain_ml_pipeline(background_tasks: BackgroundTasks):
+    if any(status == "running" for status in JOB_STATUS.values()):
+        raise HTTPException(status_code=409, detail="A job is currently running.")
+        
+    job_id = str(uuid.uuid4())
+    JOB_STATUS[job_id] = "pending"
+    background_tasks.add_task(run_retrain_task, job_id)
+    
+    return {"status": "accepted", "job_id": job_id, "message": "ML Pipeline triggered."}
+
+@app.patch("/api/employees/{employee_id}/rating")
+def update_employee_rating(employee_id: str, req: RatingRequest, background_tasks: BackgroundTasks):
+    from pipeline.config import OLTP_PATH
+    import sqlite3
+    try:
+        # Write directly to OLTP
+        with get_conn(OLTP_PATH) as conn:
+            cursor = conn.cursor()
+            now = datetime.now().isoformat()
+            cursor.execute("""
+            INSERT INTO performance_ratings (EmployeeId, PerformanceScore, rated_by, rated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(EmployeeId) DO UPDATE SET
+                PerformanceScore=excluded.PerformanceScore,
+                rated_by=excluded.rated_by,
+                rated_at=excluded.rated_at
+            """, (employee_id, req.score, "demo_manager", now))
+            conn.commit()
+            
+        # Trigger pipeline rebuild in background, same as simulate_action
+        job_id = str(uuid.uuid4())
+        JOB_STATUS[job_id] = "pending"
+        
+        def run_rating_sync():
+            JOB_STATUS[job_id] = "running"
+            from pipeline import simulator_actions as sa
+            try:
+                sa.trigger_nightly_etl_ml()
+                pipeline_store.reload()
+                JOB_STATUS[job_id] = "completed"
+            except Exception as e:
+                JOB_STATUS[job_id] = f"failed: {str(e)}"
+                logging.error(f"Rating sync failed: {e}")
+                
+        background_tasks.add_task(run_rating_sync)
+        return {"status": "accepted", "job_id": job_id, "message": "Rating updated, sync started."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update rating: {str(e)}")
 
 @app.get("/api/graph/exposure/{employee_id}")
 def get_graph_exposure(employee_id: str):
@@ -552,36 +732,53 @@ def get_graph_exposure(employee_id: str):
     Computes Network Exposure score using a Neo4j Cypher query.
     Falls back to a calculated mock score if Neo4j is offline.
     """
-    # Always calculate unboosted ML risk score (raw ML score without network contagion)
+    # Get unboosted ML risk score from the batch pipeline (same source as /api/employees table)
     unboosted_score = None
-    df_active = None
     try:
         import sqlite3
         import pandas as pd
-        from pipeline.config import OLAP_PATH
-        conn = sqlite3.connect(OLAP_PATH)
-        df_active = pd.read_sql("SELECT * FROM v_ml_features WHERE EmployeeId = ?", conn, params=(employee_id,))
-        conn.close()
-        if df_active is not None and not df_active.empty:
-            row_df = df_active.copy()
-            if "EmployeeId" in row_df.columns:
-                row_df.set_index("EmployeeId", inplace=True)
-            x_encoded = encode_single_row(row_df)
-            prof_unboosted = predict_risk_profile(x_encoded, employee_id=None)
-            unboosted_score = prof_unboosted['General_Risk_Score']
+        from pipeline.config import OLAP_PATH, get_conn
+        with get_conn(OLAP_PATH) as conn:
+            score_row = pd.read_sql(
+                "SELECT General_Risk_Score FROM flight_risk_scores WHERE EmployeeId = ?",
+                conn, params=(employee_id,)
+            )
+        if not score_row.empty:
+            unboosted_score = float(score_row['General_Risk_Score'].iloc[0])
     except Exception as ml_e:
-        print(f"[!] Could not calculate unboosted score: {ml_e}")
+        logging.error(f"[!] Could not fetch unboosted score: {ml_e}")
+        raise HTTPException(status_code=500, detail=f"Score lookup failed: {str(ml_e)}")
 
     driver = app.state.neo4j_driver
     if not driver:
         # Since Neo4j is offline, back-calculate a mock exposure score 
         # so the math makes sense for the user demo.
+        # Pull the contagion-boosted score from flight_risk_scores (batch pipeline output)
         final_score = 0
-        if df_active is not None and not df_active.empty and 'General_Risk_Score' in df_active.columns:
-            final_score = df_active['General_Risk_Score'].iloc[0]
-            
-        diff = final_score - (unboosted_score or final_score)
-        mock_score = round(max(0.0, diff / 15.0), 2)  # Assuming ~15% bump per 1.0 exposure point
+        try:
+            with get_conn(OLAP_PATH) as conn:
+                score_row = pd.read_sql(
+                    "SELECT General_Risk_Score FROM flight_risk_scores WHERE EmployeeId = ?",
+                    conn, params=(employee_id,)
+                )
+            if not score_row.empty:
+                final_score = float(score_row['General_Risk_Score'].iloc[0])
+        except Exception:
+            pass
+        
+        # Generate a deterministic mock exposure based on employee context
+        # Use the employee's risk level to create a plausible network exposure
+        import hashlib
+        seed_val = int(hashlib.md5(employee_id.encode()).hexdigest()[:8], 16) % 1000
+        base_exposure = seed_val / 1000.0  # 0.0 to 1.0
+        
+        # Scale exposure: high-risk employees more likely to have high-risk peers
+        if unboosted_score is not None and unboosted_score > 50:
+            mock_score = round(base_exposure * 2.5, 2)  # 0.0 to 2.5
+        elif unboosted_score is not None and unboosted_score > 25:
+            mock_score = round(base_exposure * 1.2, 2)  # 0.0 to 1.2
+        else:
+            mock_score = round(base_exposure * 0.4, 2)  # 0.0 to 0.4
         
         # Add a fake peer if the mock score is non-trivial
         mock_peers = []
@@ -616,7 +813,7 @@ def get_graph_exposure(employee_id: str):
     WITH peer, r, duration.inDays(date(peer.exitDate), date()).days AS days_since_exit
     WHERE days_since_exit <= 60
     RETURN peer.id AS peer_id, peer.jobRole AS peer_role, r.weight AS edge_weight, days_since_exit
-    ORDER BY edge_weight DESC LIMIT 5
+    ORDER BY edge_weight DESC
     """
     
     try:
@@ -653,22 +850,19 @@ def get_graph_exposure(employee_id: str):
                     if days_since_exit_then >= 0:
                         daily += rp["weight"] * math.exp(-0.1 * days_since_exit_then)
                 curve.append({"day": -d, "score": round(daily, 2)})
-            # Calculate unboosted ML risk score
+            # Get unboosted ML risk score from the same batch source as the table
             unboosted_score = None
             try:
                 conn = sqlite3.connect(OLAP_PATH)
-                df_active = pd.read_sql("SELECT * FROM v_ml_features WHERE EmployeeId = ?", conn, params=(employee_id,))
+                score_row = pd.read_sql(
+                    "SELECT General_Risk_Score FROM flight_risk_scores WHERE EmployeeId = ?",
+                    conn, params=(employee_id,)
+                )
                 conn.close()
-                if not df_active.empty:
-                    row_df = df_active.copy()
-                    if "EmployeeId" in row_df.columns:
-                        row_df.set_index("EmployeeId", inplace=True)
-                    x_encoded = encode_single_row(row_df)
-                    # Pass employee_id=None to intentionally get the raw unboosted score
-                    prof_unboosted = predict_risk_profile(x_encoded, employee_id=None)
-                    unboosted_score = prof_unboosted['General_Risk_Score']
+                if not score_row.empty:
+                    unboosted_score = float(score_row['General_Risk_Score'].iloc[0])
             except Exception as ml_e:
-                print(f"[!] Could not calculate unboosted score: {ml_e}")
+                print(f"[!] Could not fetch unboosted score: {ml_e}")
 
             return {
                 "exposure_score": round(total_exposure, 2),
@@ -716,6 +910,16 @@ def get_org_network_tree(department: Optional[str] = None):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/similarity-network/{department}")
+def get_similarity_network(department: str):
+    """Serve pre-generated similarity network JSON for the given department."""
+    slug = department.replace(" ", "_").replace("&", "and")
+    file_path = os.path.join(DATA_DIR, f"similarity_network_{slug}.json")
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Similarity network not generated for this department.")
+    with open(file_path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
 @app.get("/api/org-network/exposure-history/{employee_id}")
 def get_org_network_exposure(employee_id: str):
     try:
@@ -751,7 +955,7 @@ def get_org_network_exposure(employee_id: str):
 
 @app.get("/dashboard/org-network", response_class=HTMLResponse)
 def org_network():
-    with open('app/org_network.html', 'r', encoding='utf-8') as f:
+    with open('app/org_network_similarity.html', 'r', encoding='utf-8') as f:
         return f.read()
 
 if __name__ == "__main__":
