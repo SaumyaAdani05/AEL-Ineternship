@@ -84,6 +84,9 @@ def trigger_nightly_etl_ml():
     logging.info(f"  [Hierarchy] Launching: {python_exe} pipeline/org_hierarchy.py")
     subprocess.run([python_exe, "pipeline/org_hierarchy.py"], check=True)
     
+    logging.info(f"  [Similarity] Launching: {python_exe} -m pipeline.similarity_network")
+    subprocess.run([python_exe, "-m", "pipeline.similarity_network"], check=True)
+    
     logging.info("[+] Nightly ETL + ML run finished. Risk scores synchronized.")
 
 if __name__ == "__main__":

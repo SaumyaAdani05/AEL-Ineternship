@@ -34,7 +34,7 @@ warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
 sys.stdout.reconfigure(encoding='utf-8')
 
 # Paths and configuration
-from pipeline.config import OLAP_PATH, MODEL_DIR
+from pipeline.config import OLAP_PATH, MODEL_DIR, DATA_DIR
 
 
 # In-memory pipeline cache and jobs
@@ -910,6 +910,16 @@ def get_org_network_tree(department: Optional[str] = None):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/similarity-network/{department}")
+def get_similarity_network(department: str):
+    """Serve pre-generated similarity network JSON for the given department."""
+    slug = department.replace(" ", "_").replace("&", "and")
+    file_path = os.path.join(DATA_DIR, f"similarity_network_{slug}.json")
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Similarity network not generated for this department.")
+    with open(file_path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
 @app.get("/api/org-network/exposure-history/{employee_id}")
 def get_org_network_exposure(employee_id: str):
     try:
@@ -945,7 +955,7 @@ def get_org_network_exposure(employee_id: str):
 
 @app.get("/dashboard/org-network", response_class=HTMLResponse)
 def org_network():
-    with open('app/org_network.html', 'r', encoding='utf-8') as f:
+    with open('app/org_network_similarity.html', 'r', encoding='utf-8') as f:
         return f.read()
 
 if __name__ == "__main__":

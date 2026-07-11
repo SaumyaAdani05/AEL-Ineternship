@@ -14,13 +14,14 @@ from datetime import datetime
 import logging
 
 from pipeline.config import OLTP_PATH, OLAP_PATH, get_conn
+from pipeline.synthetic_attributes import assign_project
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Schema mappings for the 5 logical domains
 THEME_COLUMNS = {
     "identity": ["EmployeeId", "Age", "Gender", "MaritalStatus", "Education", "EducationField", "BusinessTravel"],
-    "environment": ["EmployeeId", "Department", "JobRole", "DistanceFromHome", "OverTime", "JobLevel"],
+    "environment": ["EmployeeId", "Department", "JobRole", "DistanceFromHome", "OverTime", "JobLevel", "Project"],
     "compensation": ["EmployeeId", "MonthlyIncome", "PercentSalaryHike", "StockOptionLevel", "DailyRate", "HourlyRate", "MonthlyRate"],
     "sentiment": ["EmployeeId", "EnvironmentSatisfaction", "RelationshipSatisfaction", "WorkLifeBalance", "JobInvolvement", "JobSatisfaction", "PerformanceRating", "PerformanceScore"],
     "tenure": ["EmployeeId", "YearsAtCompany", "YearsInCurrentRole", "YearsSinceLastPromotion", "YearsWithCurrManager", "TotalWorkingYears", "TrainingTimesLastYear", "NumCompaniesWorked", "Attrition", "DateOfLeaving"]
@@ -40,6 +41,7 @@ def init_olap_schema():
         Department TEXT, DistanceFromHome INTEGER, Education TEXT,
         EducationField TEXT, EnvironmentSatisfaction TEXT, Gender TEXT,
         HourlyRate REAL, JobInvolvement TEXT, JobLevel TEXT, JobRole TEXT,
+        Project TEXT,
         JobSatisfaction TEXT, MaritalStatus TEXT, MonthlyIncome REAL,
         MonthlyRate REAL, NumCompaniesWorked INTEGER, OverTime TEXT,
         PercentSalaryHike REAL, PerformanceRating TEXT, PerformanceScore INTEGER, RelationshipSatisfaction TEXT,
@@ -67,7 +69,7 @@ def init_olap_schema():
     CREATE TABLE IF NOT EXISTS theme_environment (
         row_id INTEGER PRIMARY KEY AUTOINCREMENT,
         EmployeeId TEXT, Department TEXT, JobRole TEXT, DistanceFromHome INTEGER, 
-        OverTime TEXT, JobLevel TEXT,
+        OverTime TEXT, JobLevel TEXT, Project TEXT,
         valid_from TEXT, valid_to TEXT, is_active INTEGER
     );
     """)
@@ -120,14 +122,22 @@ def init_olap_schema():
     );
     """)
 
-    # 4. Create virtual join view (Layer 2 Translation View)
+    # 4. Migration: add Project column to existing tables if missing
+    for table in ("employee_history", "theme_environment"):
+        cursor.execute(f"PRAGMA table_info({table})")
+        cols = [row[1] for row in cursor.fetchall()]
+        if "Project" not in cols:
+            cursor.execute(f"ALTER TABLE {table} ADD COLUMN Project TEXT")
+            logging.info(f"[+] Migrated: added Project column to {table}")
+
+    # 5. Create virtual join view (Layer 2 Translation View)
     cursor.execute("DROP VIEW IF EXISTS v_ml_features;")
     cursor.execute("""
     CREATE VIEW v_ml_features AS
     SELECT 
         i.EmployeeId,
         i.Age, i.Gender, i.MaritalStatus, i.Education, i.EducationField, i.BusinessTravel,
-        e.Department, e.JobRole, e.DistanceFromHome, e.OverTime, e.JobLevel,
+        e.Department, e.JobRole, e.DistanceFromHome, e.OverTime, e.JobLevel, e.Project,
         c.MonthlyIncome, c.PercentSalaryHike, c.StockOptionLevel, c.DailyRate, c.HourlyRate, c.MonthlyRate,
         s.EnvironmentSatisfaction, s.RelationshipSatisfaction, s.WorkLifeBalance, s.JobInvolvement, s.JobSatisfaction, s.PerformanceRating, s.PerformanceScore,
         t.YearsAtCompany, t.YearsInCurrentRole, t.YearsSinceLastPromotion, t.YearsWithCurrManager, t.TotalWorkingYears, t.TrainingTimesLastYear, t.NumCompaniesWorked, t.Attrition, t.DateOfLeaving
@@ -191,16 +201,34 @@ def run_etl():
         # Exclude metadata index
         cols_to_check = [c for c in df_oltp.columns]
         
+        # Compute synthetic Project assignment (deterministic, not from OLTP)
+        project_val = assign_project(
+            emp_id, row["Department"], row["JobRole"], row["JobLevel"]
+        )
+        
         if emp_id not in df_olap_active.index:
             # Case A: New Employee
-            # 1. Write master history record
-            vals = [emp_id] + list(row[cols_to_check]) + [timestamp, None, 1]
+            # 1. Write master history record (Project added to columns)
+            hist_cols = ['EmployeeId'] + cols_to_check + ['Project', 'valid_from', 'valid_to', 'is_active']
+            vals = [emp_id] + list(row[cols_to_check]) + [project_val, timestamp, None, 1]
             placeholders = ", ".join(["?"] * len(vals))
-            cursor.execute(f"INSERT INTO employee_history ({', '.join(['EmployeeId'] + cols_to_check + ['valid_from', 'valid_to', 'is_active'])}) VALUES ({placeholders})", vals)
+            cursor.execute(f"INSERT INTO employee_history ({', '.join(hist_cols)}) VALUES ({placeholders})", vals)
             
             # 2. Write theme records
             for theme, cols in THEME_COLUMNS.items():
-                theme_vals = [emp_id] + [row[c] for c in cols if c != "EmployeeId"] + [timestamp, None, 1]
+                if theme == "environment":
+                    # Special-case: Project is synthetic, not in df_oltp
+                    theme_vals = [emp_id]
+                    for c in cols:
+                        if c == "EmployeeId":
+                            continue
+                        elif c == "Project":
+                            theme_vals.append(project_val)
+                        else:
+                            theme_vals.append(row[c])
+                    theme_vals += [timestamp, None, 1]
+                else:
+                    theme_vals = [emp_id] + [row[c] for c in cols if c != "EmployeeId"] + [timestamp, None, 1]
                 theme_placeholders = ", ".join(["?"] * len(theme_vals))
                 theme_col_names = ", ".join(cols + ["valid_from", "valid_to", "is_active"])
                 cursor.execute(f"INSERT INTO theme_{theme} ({theme_col_names}) VALUES ({theme_placeholders})", theme_vals)
@@ -226,13 +254,26 @@ def run_etl():
                 for theme in THEME_COLUMNS.keys():
                     cursor.execute(f"UPDATE theme_{theme} SET valid_to = ?, is_active = 0 WHERE EmployeeId = ? AND is_active = 1", (timestamp, emp_id))
                 
-                # Write new active version
-                vals = [emp_id] + list(row[cols_to_check]) + [timestamp, None, 1]
+                # Write new active version (Project added to columns)
+                hist_cols = ['EmployeeId'] + cols_to_check + ['Project', 'valid_from', 'valid_to', 'is_active']
+                vals = [emp_id] + list(row[cols_to_check]) + [project_val, timestamp, None, 1]
                 placeholders = ", ".join(["?"] * len(vals))
-                cursor.execute(f"INSERT INTO employee_history ({', '.join(['EmployeeId'] + cols_to_check + ['valid_from', 'valid_to', 'is_active'])}) VALUES ({placeholders})", vals)
+                cursor.execute(f"INSERT INTO employee_history ({', '.join(hist_cols)}) VALUES ({placeholders})", vals)
                 
                 for theme, cols in THEME_COLUMNS.items():
-                    theme_vals = [emp_id] + [row[c] for c in cols if c != "EmployeeId"] + [timestamp, None, 1]
+                    if theme == "environment":
+                        # Special-case: Project is synthetic, not in df_oltp
+                        theme_vals = [emp_id]
+                        for c in cols:
+                            if c == "EmployeeId":
+                                continue
+                            elif c == "Project":
+                                theme_vals.append(project_val)
+                            else:
+                                theme_vals.append(row[c])
+                        theme_vals += [timestamp, None, 1]
+                    else:
+                        theme_vals = [emp_id] + [row[c] for c in cols if c != "EmployeeId"] + [timestamp, None, 1]
                     theme_placeholders = ", ".join(["?"] * len(theme_vals))
                     theme_col_names = ", ".join(cols + ["valid_from", "valid_to", "is_active"])
                     cursor.execute(f"INSERT INTO theme_{theme} ({theme_col_names}) VALUES ({theme_placeholders})", theme_vals)
