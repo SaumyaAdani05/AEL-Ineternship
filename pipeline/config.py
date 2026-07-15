@@ -99,7 +99,7 @@ ORDINAL_MAPPINGS: Dict[str, Dict[str, int]] = {
 }
 
 # Low-cardinality nominal columns — one-hot encoded
-ONE_HOT_COLS: List[str] = ["Gender", "MaritalStatus", "OverTime", "Department"]
+ONE_HOT_COLS: List[str] = ["Gender", "MaritalStatus", "OverTime", "Department", "Project"]
 
 # High-cardinality nominal columns — Leave-One-Out target encoded
 LOO_COLS: List[str] = ["JobRole", "EducationField"]
@@ -114,6 +114,7 @@ SKIP_NUMERIC_CAST: List[str] = [
     "JobRole",
     "MaritalStatus",
     "OverTime",
+    "Project",
     "DateOfLeaving"
 ]
 
