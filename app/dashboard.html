@@ -808,15 +808,11 @@
         resultsDiv.innerHTML = msg;
         resultsDiv.classList.remove("hidden");
 
-        // Apply contagion exposure to simulated curve to make it comparable
-        let exposure = parseFloat(document.getElementById("drawer-exposure-score").innerText);
-        if (isNaN(exposure)) exposure = 0;
-
         const simCurve = [
-          Math.min(100.0, (1.0 - Math.pow(1.0 - parseFloat(data.Prob_1M)/100, 1 + exposure)) * 100),
-          Math.min(100.0, (1.0 - Math.pow(1.0 - parseFloat(data.Prob_3M)/100, 1 + exposure)) * 100),
-          Math.min(100.0, (1.0 - Math.pow(1.0 - parseFloat(data.Prob_6M)/100, 1 + exposure)) * 100),
-          Math.min(100.0, (1.0 - Math.pow(1.0 - parseFloat(data.Prob_12M)/100, 1 + exposure)) * 100)
+          parseFloat(data.Prob_1M),
+          parseFloat(data.Prob_3M),
+          parseFloat(data.Prob_6M),
+          parseFloat(data.Prob_12M)
         ];
 
         // Add simulated curve to chart
