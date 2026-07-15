@@ -235,7 +235,9 @@ def list_employees(
     
     # Add boosted score columns
     df["Exposure_Score"] = df["EmployeeId"].map(lambda x: exposure_map.get(x, 0.0))
-    df["Boosted_Risk_Score"] = (df["General_Risk_Score"] * (1 + df["Exposure_Score"])).clip(upper=100.0)
+    # Apply proportional hazards survival formula: P = 1 - (1 - P_base)^(1 + exposure)
+    base_prob = df["General_Risk_Score"] / 100.0
+    df["Boosted_Risk_Score"] = (1.0 - (1.0 - base_prob) ** (1.0 + df["Exposure_Score"])) * 100.0
     
     # Stats using boosted scores (consistent with what the UI displays)
     total_active = len(df)

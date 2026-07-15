@@ -251,10 +251,7 @@
               <select id="dept-filter" onchange="changeDepartmentFilter(this.value)" class="btn-outline outline-none">
                 <option value="">All Departments</option>
               </select>
-              <button class="btn-outline px-3 py-1.5 text-xs text-orange-600 border-orange-200 hover:bg-orange-50" onclick="retrainModel()">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg> 
-                Retrain ML Model
-              </button>
+
               <button class="btn-outline px-3 py-1.5 text-xs" onclick="fetchData()"><svg class="w-4 h-4" fill="none"
                   stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -670,8 +667,9 @@
             document.getElementById("drawer-retention-prob").innerText = `${data.unboosted_score.toFixed(1)}%`;
             
             // Boost the Baseline Risk Score by the contagion exposure
-            // Formula: boosted = unboosted * (1 + exposure_score), capped at 100
-            const boostedScore = Math.min(100, data.unboosted_score * (1 + data.exposure_score));
+            // Formula: boosted = 1 - (1 - unboosted)^(1 + exposure)
+            const baseProb = data.unboosted_score / 100.0;
+            const boostedScore = (1.0 - Math.pow(1.0 - baseProb, 1 + data.exposure_score)) * 100.0;
             document.getElementById("drawer-risk-score").innerText = `${boostedScore.toFixed(1)}%`;
             
             // Recalculate timeline curve with contagion exposure multiplier to match
@@ -810,11 +808,15 @@
         resultsDiv.innerHTML = msg;
         resultsDiv.classList.remove("hidden");
 
+        // Apply contagion exposure to simulated curve to make it comparable
+        let exposure = parseFloat(document.getElementById("drawer-exposure-score").innerText);
+        if (isNaN(exposure)) exposure = 0;
+
         const simCurve = [
-          parseFloat(data.Prob_1M),
-          parseFloat(data.Prob_3M),
-          parseFloat(data.Prob_6M),
-          parseFloat(data.Prob_12M)
+          Math.min(100.0, (1.0 - Math.pow(1.0 - parseFloat(data.Prob_1M)/100, 1 + exposure)) * 100),
+          Math.min(100.0, (1.0 - Math.pow(1.0 - parseFloat(data.Prob_3M)/100, 1 + exposure)) * 100),
+          Math.min(100.0, (1.0 - Math.pow(1.0 - parseFloat(data.Prob_6M)/100, 1 + exposure)) * 100),
+          Math.min(100.0, (1.0 - Math.pow(1.0 - parseFloat(data.Prob_12M)/100, 1 + exposure)) * 100)
         ];
 
         // Add simulated curve to chart
