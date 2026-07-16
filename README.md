@@ -171,8 +171,8 @@ http://127.0.0.1:8000/dashboard/org-network
 
 An investigation was conducted to determine if attrition clusters temporally within departments, meaning whether one employee leaving triggers peers to leave.
 
-1. **Validation (Phase 0):** A robust Monte Carlo permutation test over the historical database proved the actual lift was only `0.95x`. This statistically confirmed that exits do **not** cluster.
-2. **Infrastructure Built:** Although not integrated into the ML pipeline due to the negative signal, the graph infrastructure was fully built. Synthetic hierarchical data is generated via `pipeline/graph_exporter.py` and can be imported into a local Neo4j Community instance or via `docker-compose`.
+1. **Validation (Phase 0):** A Monte Carlo permutation test (1000 permutations, `scratch/phase0_hypothesis.py`) over the historical OLAP warehouse measured a mean inter-exit gap of 1.88 days observed vs 2.00 days expected. The computed lift was `0.94x` with a p-value of `0.0`, indicating statistically significant temporal clustering of exits within departments. Results are recorded in `scratch/phase0_results.json`.
+2. **Infrastructure Built:** The graph infrastructure was fully built. Synthetic hierarchical data is generated via `pipeline/graph_exporter.py` and can be imported into a local Neo4j Community instance or via `docker-compose`.
 3. **Dashboard Fallback:** The FastAPI server connects to Neo4j to query time-decayed exposure scores. If the instance is offline, it gracefully falls back to mock visual scores in the frontend Employee Detail drawer. The `production_ml.py` model explicitly excludes these scores to prevent noise.
 
 ## Employee Similarity Network
