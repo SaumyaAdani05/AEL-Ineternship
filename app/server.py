@@ -35,6 +35,16 @@ sys.stdout.reconfigure(encoding='utf-8')
 
 # Paths and configuration
 from pipeline.config import OLAP_PATH, MODEL_DIR, DATA_DIR
+from pipeline.attrition_toy_simulation import (
+    simulate as attrition_simulate,
+    DEFAULT_N_SIMS,
+    MAX_N_SIMS,
+    DEFAULT_ALPHA,
+    DEFAULT_BETA,
+    DEFAULT_STARTING_HEADCOUNT,
+    DEFAULT_RATE_LO,
+    DEFAULT_RATE_HI,
+)
 
 
 # In-memory pipeline cache and jobs
@@ -84,6 +94,7 @@ class PipelineStore:
 
 pipeline_store = PipelineStore()
 JOB_STATUS = {}
+JOB_STATUS_LOCK = threading.Lock()
 
 from contextlib import asynccontextmanager
 from pipeline.config import get_conn
@@ -136,6 +147,14 @@ class ActionRequest(BaseModel):
 
 class RatingRequest(BaseModel):
     score: int = Field(..., ge=1, le=4)
+
+class AttritionSimRequest(BaseModel):
+    n_sims: int = Field(default=DEFAULT_N_SIMS, ge=1, le=MAX_N_SIMS)
+    alpha: float = Field(default=DEFAULT_ALPHA, gt=0)
+    beta: float = Field(default=DEFAULT_BETA, gt=0)
+    starting_headcount: int = Field(default=DEFAULT_STARTING_HEADCOUNT, ge=1)
+    rate_lo: float = Field(default=DEFAULT_RATE_LO, ge=0.0, le=1.0)
+    rate_hi: float = Field(default=DEFAULT_RATE_HI, ge=0.0, le=1.0)
 
 # ============================================================================
 #  API ENDPOINTS
@@ -651,12 +670,14 @@ def simulate_action(req: ActionRequest, background_tasks: BackgroundTasks):
     if not strategy:
         raise HTTPException(400, f"Unknown action: {req.action}")
         
-    # Check for concurrent running simulations
-    if any(status == "running" for status in JOB_STATUS.values()):
-        raise HTTPException(status_code=409, detail="Another simulation is currently running.")
-        
-    job_id = str(uuid.uuid4())
-    JOB_STATUS[job_id] = "pending"
+    # Atomic check-and-mark: prevents TOCTOU race when FastAPI runs
+    # sync endpoints concurrently in its thread pool.
+    with JOB_STATUS_LOCK:
+        if any(status == "running" for status in JOB_STATUS.values()):
+            raise HTTPException(status_code=409, detail="Another simulation is currently running.")
+        job_id = str(uuid.uuid4())
+        JOB_STATUS[job_id] = "pending"
+
     background_tasks.add_task(run_simulation_task, job_id, strategy, req.EmployeeId, req.params)
     
     return {"status": "accepted", "job_id": job_id, "message": "Simulation action accepted and processing in background."}
@@ -680,11 +701,12 @@ def run_retrain_task(job_id: str):
 
 @app.post("/api/retrain")
 def retrain_ml_pipeline(background_tasks: BackgroundTasks):
-    if any(status == "running" for status in JOB_STATUS.values()):
-        raise HTTPException(status_code=409, detail="A job is currently running.")
-        
-    job_id = str(uuid.uuid4())
-    JOB_STATUS[job_id] = "pending"
+    with JOB_STATUS_LOCK:
+        if any(status == "running" for status in JOB_STATUS.values()):
+            raise HTTPException(status_code=409, detail="A job is currently running.")
+        job_id = str(uuid.uuid4())
+        JOB_STATUS[job_id] = "pending"
+
     background_tasks.add_task(run_retrain_task, job_id)
     
     return {"status": "accepted", "job_id": job_id, "message": "ML Pipeline triggered."}
@@ -709,8 +731,9 @@ def update_employee_rating(employee_id: str, req: RatingRequest, background_task
             conn.commit()
             
         # Trigger pipeline rebuild in background, same as simulate_action
-        job_id = str(uuid.uuid4())
-        JOB_STATUS[job_id] = "pending"
+        with JOB_STATUS_LOCK:
+            job_id = str(uuid.uuid4())
+            JOB_STATUS[job_id] = "pending"
         
         def run_rating_sync():
             JOB_STATUS[job_id] = "running"
@@ -958,6 +981,33 @@ def get_org_network_exposure(employee_id: str):
 @app.get("/dashboard/org-network", response_class=HTMLResponse)
 def org_network():
     with open('app/org_network_similarity.html', 'r', encoding='utf-8') as f:
+        return f.read()
+
+@app.post("/api/simulate/attrition-distribution")
+def simulate_attrition_distribution(req: AttritionSimRequest):
+    try:
+        result = attrition_simulate(
+            n_sims=req.n_sims, 
+            alpha=req.alpha, 
+            beta=req.beta,
+            starting_headcount=req.starting_headcount,
+            rate_lo=req.rate_lo,
+            rate_hi=req.rate_hi,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return result
+
+@app.get("/dashboard/attrition-simulation", response_class=HTMLResponse)
+def attrition_simulation_page():
+    page_path = os.path.join(os.path.dirname(__file__), "attrition_simulation.html")
+    with open(page_path, 'r', encoding='utf-8') as f:
+        return f.read()
+
+@app.get("/dashboard/attrition-simulation-graph", response_class=HTMLResponse)
+def attrition_simulation_graph_page():
+    page_path = os.path.join(os.path.dirname(__file__), "attrition_simulation_graph.html")
+    with open(page_path, 'r', encoding='utf-8') as f:
         return f.read()
 
 if __name__ == "__main__":

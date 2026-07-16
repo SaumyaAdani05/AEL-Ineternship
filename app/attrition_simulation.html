@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en" class="bg-[#F8F9FA] text-gray-800 h-full">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Attrition Headcount Forecaster</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #CBD5E1;
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94A3B8;
+    }
+
+    /* Custom Styles */
+    .card {
+      background: white;
+      border-radius: 1.25rem;
+      border: 1px solid #F1F5F9;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -1px rgba(0, 0, 0, 0.02);
+    }
+
+    .btn-outline {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      border: 1px solid #E2E8F0;
+      border-radius: 0.75rem;
+      font-weight: 500;
+      font-size: 0.875rem;
+      color: #475569;
+      background: white;
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+
+    .btn-outline:hover {
+      background-color: #F8FAFC;
+      border-color: #CBD5E1;
+    }
+
+    th {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #64748B;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid #E2E8F0;
+      white-space: nowrap;
+    }
+
+    td {
+      font-size: 0.875rem;
+      color: #334155;
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid #F1F5F9;
+      white-space: nowrap;
+    }
+
+    tbody tr:hover {
+      background-color: #F8FAFC;
+    }
+  </style>
+</head>
+
+<body class="flex h-full overflow-hidden">
+
+  <!-- Loading Overlay -->
+  <div id="loading-overlay" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex flex-col items-center justify-center hidden">
+    <div class="bg-white p-8 rounded-2xl shadow-2xl flex flex-col items-center max-w-sm text-center">
+      <div class="w-12 h-12 border-4 border-orange-200 border-t-orange-500 rounded-full animate-spin mb-4"></div>
+      <h3 class="text-xl font-bold text-slate-800">Running Simulation...</h3>
+      <p class="text-sm text-slate-500 mt-2">Simulating scenarios and calculating headcount month over month.</p>
+    </div>
+  </div>
+
+  <main class="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+
+    <!-- Top Nav -->
+    <header class="h-16 flex items-center justify-between px-8 bg-transparent shrink-0 pt-4">
+      <h1 class="text-lg font-bold text-slate-800">Attrition Headcount Forecaster</h1>
+      <div class="flex items-center gap-3">
+        <a href="/" class="px-4 py-2 text-sm font-semibold text-slate-700 bg-white border border-slate-200 rounded-lg shadow-sm hover:bg-slate-50 transition-colors">← Dashboard</a>
+        <a href="/dashboard/org-network" class="px-4 py-2 text-sm font-semibold text-slate-700 bg-white border border-slate-200 rounded-lg shadow-sm hover:bg-slate-50 transition-colors">Org Network Graph</a>
+        <a href="/dashboard/attrition-simulation" class="px-4 py-2 text-sm font-semibold text-slate-700 bg-white border border-slate-200 rounded-lg shadow-sm hover:bg-slate-50 transition-colors">Attrition Simulation</a>
+      </div>
+    </header>
+
+    <!-- Scrollable Content -->
+    <div class="flex-1 overflow-y-auto p-8 pt-4 flex flex-col h-full">
+
+      <!-- Controls Card -->
+      <div class="card p-6 mb-6 shrink-0">
+        <div class="flex items-end gap-6 flex-wrap">
+          <!-- n_sims -->
+          <div>
+            <label for="n-sims" class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Scenarios to Run</label>
+            <input type="number" id="n-sims" value="10000" min="1" max="100000" step="1000"
+              class="w-40 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-orange-500 transition-colors shadow-sm">
+          </div>
+          
+          <!-- starting_headcount -->
+          <div>
+            <label for="starting-headcount" class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Starting Headcount</label>
+            <input type="number" id="starting-headcount" value="1489" min="1" step="1"
+              class="w-40 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-orange-500 transition-colors shadow-sm">
+          </div>
+
+          <!-- rate_lo -->
+          <div>
+            <label for="rate-lo" class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Min Rate (%)</label>
+            <input type="number" id="rate-lo" value="5" min="0" max="100" step="1"
+              class="w-24 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-orange-500 transition-colors shadow-sm">
+          </div>
+
+          <!-- rate_hi -->
+          <div>
+            <label for="rate-hi" class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Max Rate (%)</label>
+            <input type="number" id="rate-hi" value="15" min="0" max="100" step="1"
+              class="w-24 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-orange-500 transition-colors shadow-sm">
+          </div>
+
+          <!-- Run Button -->
+          <button id="run-btn" onclick="runSimulation()"
+            class="px-5 py-2.5 bg-orange-600 text-white text-sm font-semibold rounded-lg shadow-sm hover:bg-orange-700 transition-colors flex items-center gap-2">
+            <span id="btn-text">Run Simulation</span>
+          </button>
+          
+          <a href="/dashboard/attrition-simulation-graph" class="btn-outline ml-auto">
+            View Graph
+          </a>
+        </div>
+        <p class="text-xs text-slate-400 mt-3" id="warning-text">Simulates possible future headcount trajectories over 12 months.</p>
+      </div>
+
+      <!-- Stats Row -->
+      <div class="flex items-center justify-between mb-4 shrink-0">
+        <h2 class="text-lg font-semibold text-slate-800">Results Table</h2>
+        <div id="stats-summary" class="text-sm text-slate-500"></div>
+      </div>
+
+      <!-- Table Card -->
+      <div class="card flex flex-col flex-1 min-h-0 relative">
+        <div class="flex-1 overflow-auto">
+          <table class="w-full text-left border-collapse">
+            <thead class="sticky top-0 bg-white z-10">
+              <tr>
+                <th class="w-24">Scenario #</th>
+                <th>Month 0</th>
+                <th>Month 1</th>
+                <th>Month 2</th>
+                <th>Month 3</th>
+                <th>Month 4</th>
+                <th>Month 5</th>
+                <th>Month 6</th>
+                <th>Month 7</th>
+                <th>Month 8</th>
+                <th>Month 9</th>
+                <th>Month 10</th>
+                <th>Month 11</th>
+                <th>Month 12</th>
+                <th class="bg-blue-50/80 text-blue-800">Final Headcount</th>
+                <th class="bg-orange-50/80 text-orange-800">Total Lost</th>
+              </tr>
+            </thead>
+            <tbody id="table-body">
+              <tr>
+                <td colspan="16" class="text-center py-8 text-slate-400">Click <strong>Run Simulation</strong> to generate headcount scenarios.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        
+        <!-- Pagination Controls -->
+        <div class="flex items-center justify-between px-6 py-4 border-t border-slate-200 bg-slate-50 rounded-b-[1.25rem] shrink-0" id="pagination-controls" style="display: none;">
+          <div class="flex items-center gap-2">
+            <span class="text-sm text-slate-500">Rows per page:</span>
+            <select id="page-size" onchange="changePageSize()" class="bg-white border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-orange-500 focus:border-orange-500 block p-1.5">
+              <option value="50">50</option>
+              <option value="100" selected>100</option>
+              <option value="500">500</option>
+            </select>
+          </div>
+          
+          <div class="text-sm text-slate-500">
+            Showing <span id="page-start" class="font-medium text-slate-700">0</span> to <span id="page-end" class="font-medium text-slate-700">0</span> of <span id="page-total" class="font-medium text-slate-700">0</span> scenarios
+          </div>
+          
+          <div class="flex gap-2">
+            <button onclick="prevPage()" id="btn-prev" class="px-3 py-1 bg-white border border-slate-300 rounded-md text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed">Previous</button>
+            <button onclick="nextPage()" id="btn-next" class="px-3 py-1 bg-white border border-slate-300 rounded-md text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed">Next</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    let simData = null;
+    let currentPage = 1;
+    let pageSize = 100;
+
+    async function runSimulation() {
+      const nSims = parseInt(document.getElementById('n-sims').value) || 10000;
+      const startHeadcount = parseInt(document.getElementById('starting-headcount').value) || 1489;
+      const rateLo = (parseFloat(document.getElementById('rate-lo').value) || 5) / 100.0;
+      const rateHi = (parseFloat(document.getElementById('rate-hi').value) || 15) / 100.0;
+
+      if (nSims < 1 || nSims > 100000) {
+        alert('Scenarios must be between 1 and 100,000.');
+        return;
+      }
+      if (rateLo < 0 || rateHi > 1 || rateLo >= rateHi) {
+        alert('Invalid rates. Min Rate must be less than Max Rate and between 0 and 100.');
+        return;
+      }
+      
+      const warningText = document.getElementById('warning-text');
+      if (nSims > 50000) {
+        warningText.innerHTML = '<span class="text-orange-500 font-semibold">Warning: Large payload. Fetching and rendering might take a few seconds.</span>';
+      } else {
+        warningText.innerHTML = 'Simulates possible future headcount trajectories over 12 months.';
+      }
+
+      document.getElementById('loading-overlay').classList.remove('hidden');
+
+      try {
+        const resp = await fetch('/api/simulate/attrition-distribution', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            n_sims: nSims,
+            starting_headcount: startHeadcount,
+            rate_lo: rateLo,
+            rate_hi: rateHi
+          }),
+        });
+
+        if (!resp.ok) {
+          const err = await resp.json();
+          alert(`Error: ${err.detail || resp.statusText}`);
+          return;
+        }
+
+        const data = await resp.json();
+        simData = data.scenarios;
+        
+        // Update Stats
+        const stats = data.stats;
+        document.getElementById('stats-summary').innerHTML =
+          `<span class="font-semibold text-slate-700">Mean Final Headcount: ${stats.mean.toFixed(1)}</span>` +
+          `<span class="mx-2 text-slate-300">|</span>` +
+          `<span>Median: ${stats.p50.toFixed(1)}</span>` +
+          `<span class="mx-2 text-slate-300">|</span>` +
+          `<span>10th-90th Percentile: [${stats.p10.toFixed(1)}, ${stats.p90.toFixed(1)}]</span>` +
+          `<span class="mx-2 text-slate-300">|</span>` +
+          `<span>Min/Max: ${stats.min} - ${stats.max}</span>`;
+
+        currentPage = 1;
+        document.getElementById('pagination-controls').style.display = 'flex';
+        renderTable();
+      } catch (e) {
+        alert(`Network error: ${e.message}`);
+      } finally {
+        document.getElementById('loading-overlay').classList.add('hidden');
+      }
+    }
+
+    function renderTable() {
+      if (!simData) return;
+
+      const tbody = document.getElementById('table-body');
+      tbody.innerHTML = '';
+      
+      const total = simData.length;
+      const startIdx = (currentPage - 1) * pageSize;
+      const endIdx = Math.min(startIdx + pageSize, total);
+      
+      // Update pagination text
+      document.getElementById('page-start').textContent = startIdx + 1;
+      document.getElementById('page-end').textContent = endIdx;
+      document.getElementById('page-total').textContent = total.toLocaleString();
+      
+      document.getElementById('btn-prev').disabled = currentPage === 1;
+      document.getElementById('btn-next').disabled = endIdx === total;
+
+      const slice = simData.slice(startIdx, endIdx);
+      
+      // Build rows
+      const rowsHtml = slice.map(row => {
+        let cells = `<td class="font-medium text-slate-600">#${row.id}</td>`;
+        for (let i = 0; i <= 12; i++) {
+          cells += `<td>${row.headcounts[i].toLocaleString()}</td>`;
+        }
+        cells += `<td class="bg-blue-50/50 font-bold text-blue-700">${row.final_headcount.toLocaleString()}</td>`;
+        cells += `<td class="bg-orange-50/50 font-bold text-orange-700">-${row.total_lost.toLocaleString()}</td>`;
+        return `<tr>${cells}</tr>`;
+      }).join('');
+      
+      tbody.innerHTML = rowsHtml;
+    }
+
+    function changePageSize() {
+      pageSize = parseInt(document.getElementById('page-size').value);
+      currentPage = 1;
+      renderTable();
+    }
+    
+    function prevPage() {
+      if (currentPage > 1) {
+        currentPage--;
+        renderTable();
+      }
+    }
+    
+    function nextPage() {
+      const maxPage = Math.ceil(simData.length / pageSize);
+      if (currentPage < maxPage) {
+        currentPage++;
+        renderTable();
+      }
+    }
+  </script>
+
+</body>
+</html>
